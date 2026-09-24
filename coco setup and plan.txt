@@ -1,0 +1,595 @@
+Phase 0: Setup CoCo Desktop
+Step 0.1: Install and open CoCo Desktop
+
+Install Snowflake CoCo Desktop and sign in with your Snowflake account.
+
+Create a local project folder:
+
+care360-copilot/
+
+
+Inside create:
+
+care360-copilot/
+
+├── data/
+│   ├── patients.csv
+│   ├── labs.csv
+│   ├── medications.csv
+│   ├── visits.csv
+│   └── claims.csv
+│
+├── documents/
+│   ├── clinical_notes/
+│   ├── guidelines/
+│   └── regulatory/
+│
+├── sql/
+│   ├── setup.sql
+│   ├── pipeline.sql
+│   └── patient360.sql
+│
+├── app/
+│   └── streamlit_app.py
+│
+└── docs/
+    ├── architecture.md
+    └── testing.md
+
+
+Open this folder in CoCo Desktop.
+
+Phase 1: Planning with CoCo
+
+This phase is important because judges specifically want evidence of CoCo being used before development.
+
+In CoCo Desktop chat, run:
+I am building a healthcare Patient 360 Evidence Copilot.
+
+The system must:
+- use synthetic data only
+- combine structured healthcare records and clinical documents
+- answer clinical and regulatory questions
+- show citations and evidence
+- never make unsupported medical predictions
+
+Create:
+1. Business problem statement
+2. Target users
+3. Solution workflow
+4. Healthcare ontology
+5. Snowflake architecture
+6. MVP scope for a 2-day hackathon
+
+
+Save the response into:
+
+docs/architecture.md
+
+
+Take a screenshot of this conversation.
+
+This becomes your Planning evidence.
+
+Phase 2: Generate Synthetic Data Using CoCo
+
+Do not manually create random data.
+
+Ask CoCo:
+
+Generate synthetic healthcare datasets for a Patient 360 application.
+
+Create CSV files for:
+
+1. patients
+2. diagnosis
+3. medications
+4. laboratory results
+5. visits
+6. claims
+
+Requirements:
+- 20 fictional patients
+- referential consistency using patient_id
+- realistic healthcare scenarios
+- include diabetes and hypertension cases
+- include care gaps
+- no real personal information
+
+
+Have CoCo create files inside:
+
+data/
+
+
+Your records should include examples like:
+
+Patient P1007
+
+Diagnosis:
+Type 2 Diabetes
+
+Lab:
+HbA1c = 9.8
+
+Medication:
+Metformin
+
+Care gap:
+No follow-up appointment in 90 days
+
+Phase 3: Create Snowflake Database
+
+Ask CoCo:
+
+Create Snowflake SQL for my Care360 project.
+
+Create:
+
+Database:
+CARE360_DB
+
+Schemas:
+RAW
+CURATED
+ANALYTICS
+DOCUMENTS
+
+Create tables for:
+patients
+diagnosis
+medications
+labs
+visits
+claims
+document_chunks
+
+
+CoCo should generate:
+
+sql/setup.sql
+
+
+Run it through CoCo or Snowflake.
+
+Phase 4: Load Synthetic Structured Data
+
+Ask CoCo:
+
+Create Snowflake COPY INTO commands to load CSV files from my local data folder into RAW schema.
+
+Include:
+- file formats
+- stages
+- validation queries
+
+
+Expected objects:
+
+RAW.PATIENTS
+
+RAW.LABS
+
+RAW.MEDICATIONS
+
+RAW.VISITS
+
+RAW.CLAIMS
+
+Phase 5: Build Data Transformation Pipeline
+
+Now create the patient 360 layer.
+
+Ask CoCo:
+
+Build a Snowflake healthcare transformation pipeline.
+
+Input:
+RAW healthcare tables
+
+Output:
+CURATED patient 360 view
+
+Requirements:
+- combine diagnosis
+- calculate latest lab values
+- identify medication gaps
+- identify follow-up gaps
+- summarize recent visits
+- preserve evidence source columns
+
+
+Create:
+
+CURATED.PATIENT_360
+
+
+Example output:
+
+patient_id
+
+conditions
+
+latest_hba1c
+
+active_medications
+
+last_visit_date
+
+care_gap
+
+risk_evidence
+
+Phase 6: Create Care Gap Logic
+
+Important: call it rule-based risk evidence, not AI prediction.
+
+Ask CoCo:
+
+Create rule-based healthcare care gap identification.
+
+Rules:
+
+1. HbA1c greater than 8 = uncontrolled diabetes evidence
+
+2. Medication refill gap greater than 30 days = adherence gap evidence
+
+3. No clinical visit for 90 days = follow-up gap evidence
+
+Create:
+- CARE_GAPS table
+- evidence_description column
+- source_date column
+
+
+Output:
+
+CARE_GAPS
+
+patient_id
+
+gap_type
+
+description
+
+evidence_date
+
+severity
+
+Phase 7: Prepare Clinical Documents
+
+Create synthetic PDFs.
+
+Create folders:
+
+documents/
+
+clinical_notes/
+guidelines/
+regulatory/
+
+
+Create these documents:
+
+Clinical
+CLINICAL_NOTE_P1007.pdf
+DISCHARGE_SUMMARY_P1007.pdf
+MEDICATION_REVIEW_P1007.pdf
+
+Guidelines
+DIABETES_GUIDELINE_2026.pdf
+HYPERTENSION_GUIDELINE_2026.pdf
+
+Regulatory
+ADVERSE_EVENT_SOP.pdf
+CLINICAL_DOCUMENTATION_POLICY.pdf
+
+
+Each document must contain:
+
+Document name
+Patient ID
+Date
+Page number
+Section title
+Clinical text
+
+Phase 8: Create Document Chunking Pipeline
+
+Ask CoCo:
+
+Create a document processing workflow.
+
+Input:
+Synthetic PDF healthcare documents
+
+Extract:
+
+document_name
+
+page_number
+
+patient_id
+
+document_date
+
+section
+
+text_content
+
+document_type
+
+
+Store output in:
+
+DOCUMENTS.DOCUMENT_CHUNKS
+
+
+The final table should look like:
+
+DOCUMENT_CHUNKS
+
+CH001
+
+Document:
+CLINICAL_NOTE_P1007.pdf
+
+Page:
+1
+
+Patient:
+P1007
+
+Text:
+"Patient HbA1c remains above target."
+
+Phase 9: Create Cortex Search
+
+Cortex Search is designed for retrieval over unstructured text sources and can provide supporting passages for grounded answers.
+
+Ask CoCo:
+
+Create a Cortex Search service over:
+
+DOCUMENTS.DOCUMENT_CHUNKS
+
+Searchable content:
+text_content
+
+Attributes:
+patient_id
+document_type
+document_date
+page_number
+document_name
+
+
+Your search must return:
+
+Answer fragment
+
+Document name
+
+Page number
+
+Date
+
+Phase 10: Create Semantic Model
+
+Ask CoCo:
+
+Create a healthcare semantic model for Cortex Analyst.
+
+Business entities:
+
+Patient
+
+Diagnosis
+
+Medication
+
+Lab Result
+
+Visit
+
+Claim
+
+Care Gap
+
+
+Support natural language questions:
+
+- Show patient summary
+- Find high priority patients
+- Explain care gaps
+- Show recent labs
+
+
+Create verified queries:
+
+PATIENT_SUMMARY
+
+PATIENT_CARE_GAPS
+
+LATEST_LABS
+
+Phase 11: Create the Agent
+
+Cortex Agents can combine structured data through semantic views and unstructured information through Cortex Search.
+
+Ask CoCo:
+
+Create a healthcare evidence copilot agent.
+
+Agent responsibilities:
+
+1. Retrieve patient 360 information
+2. Search clinical documents
+3. Retrieve relevant guidelines
+4. Generate answers with citations
+5. Detect contradictions
+6. Never diagnose patients
+
+Every answer must contain:
+
+Finding
+
+Evidence
+
+Source document
+
+Page number
+
+Recommended human review action
+
+Phase 12: Build Streamlit Interface Through CoCo
+
+This is recommended because the hackathon expects an application demo.
+
+Ask CoCo:
+
+Generate a Streamlit healthcare copilot application.
+
+Features:
+
+1. Patient ID search
+
+2. Patient 360 dashboard
+
+3. Ask clinical question
+
+4. Display cited evidence
+
+5. Display contradiction warnings
+
+6. Display synthetic-data disclaimer
+
+
+Application screens:
+
+Patient Search
+       |
+Patient 360
+       |
+Ask Copilot
+       |
+Evidence Panel
+
+Phase 13: Test With CoCo
+
+Ask CoCo:
+
+Perform validation testing for my healthcare copilot.
+
+Test cases:
+
+1. Valid patient ID
+2. Invalid patient ID
+3. Patient without documents
+4. Conflicting medication information
+5. Missing lab values
+6. Regulatory document question
+
+For every case provide:
+Expected result
+Actual result
+Pass/Fail
+
+
+Save:
+
+docs/testing.md
+
+Phase 14: Create Final Demo Flow
+
+Your 4-minute demo:
+
+Minute 0–1
+
+Explain:
+
+problem
+architecture
+synthetic data usage
+Minute 1–2
+
+Show CoCo Desktop:
+
+generated data
+created tables
+pipeline execution
+Minute 2–3
+
+Ask:
+
+Give me Patient 360 for P1007.
+
+
+Then:
+
+Why is P1007 requiring clinical review?
+
+
+Show:
+
+finding
+evidence
+citations
+Minute 3–4
+
+Show:
+
+Are there inconsistencies?
+
+
+Example:
+
+Medication table:
+Active
+
+Clinical note:
+Discontinued
+
+Status:
+Human verification required
+
+
+Finish:
+
+"Care360 Evidence Copilot retrieves evidence; it does not replace clinical judgement."
+
+What to capture from CoCo for judging
+
+Keep screenshots of:
+
+✅ Planning conversation
+ ✅ Ontology generation
+ ✅ Synthetic data generation
+ ✅ SQL generation
+ ✅ Pipeline execution
+ ✅ Document processing
+ ✅ Agent configuration
+ ✅ Testing results
+
+That proves full lifecycle CoCo usage.
+
+Critical advice for the last 2 days
+
+Do not try to build:
+
+MCP integrations
+multi-agent architecture
+Slack bot
+complex prediction models
+
+Your winning MVP is:
+
+Synthetic healthcare data + Patient 360 + Document Search + Cited Answer + Safety Guardrail
+
+That directly satisfies the judging criteria.
+
+
+username: sreejap
+password: PrabakarSreeja123
+
+JRMWQMS-PA19066

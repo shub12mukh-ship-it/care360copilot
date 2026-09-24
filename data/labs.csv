@@ -1,0 +1,113 @@
+lab_id,patient_id,visit_id,lab_date,test_name,test_code,result_value,result_unit,reference_range_low,reference_range_high,abnormal_flag,ordering_provider,lab_status,category
+LAB-001,PAT-001,VIS-001,2025-01-10,Hemoglobin A1c,4548-4,8.2,%,4.0,5.6,High,Dr. Sarah Chen,Final,Diabetes
+LAB-002,PAT-001,VIS-001,2025-01-10,Fasting Glucose,1558-6,185,mg/dL,70,100,High,Dr. Sarah Chen,Final,Diabetes
+LAB-003,PAT-001,VIS-001,2025-01-10,Total Cholesterol,2093-3,242,mg/dL,0,200,High,Dr. Sarah Chen,Final,Lipid Panel
+LAB-004,PAT-001,VIS-001,2025-01-10,LDL Cholesterol,2089-1,158,mg/dL,0,100,High,Dr. Sarah Chen,Final,Lipid Panel
+LAB-005,PAT-001,VIS-001,2025-01-10,HDL Cholesterol,2085-9,38,mg/dL,40,60,Low,Dr. Sarah Chen,Final,Lipid Panel
+LAB-006,PAT-001,VIS-001,2025-01-10,Triglycerides,2571-8,230,mg/dL,0,150,High,Dr. Sarah Chen,Final,Lipid Panel
+LAB-007,PAT-001,VIS-002,2025-03-15,Hemoglobin A1c,4548-4,7.8,%,4.0,5.6,High,Dr. Sarah Chen,Final,Diabetes
+LAB-008,PAT-001,VIS-004,2025-06-01,Troponin I,10839-9,0.04,ng/mL,0,0.04,Normal,Dr. Lisa Wong,Final,Cardiac
+LAB-009,PAT-001,VIS-004,2025-06-01,BNP,30934-4,95,pg/mL,0,100,Normal,Dr. Lisa Wong,Final,Cardiac
+LAB-010,PAT-001,VIS-079,2025-07-20,Hemoglobin A1c,4548-4,7.4,%,4.0,5.6,High,Dr. Sarah Chen,Final,Diabetes
+LAB-011,PAT-001,VIS-079,2025-07-20,Creatinine,2160-0,1.1,mg/dL,0.7,1.3,Normal,Dr. Sarah Chen,Final,Renal
+LAB-012,PAT-002,VIS-005,2024-11-05,TSH,3016-3,6.8,mIU/L,0.4,4.0,High,Dr. James Wilson,Final,Thyroid
+LAB-013,PAT-002,VIS-005,2024-11-05,Free T4,3024-7,0.7,ng/dL,0.8,1.8,Low,Dr. James Wilson,Final,Thyroid
+LAB-014,PAT-002,VIS-005,2024-11-05,CBC WBC,6690-2,7.2,K/uL,4.5,11.0,Normal,Dr. James Wilson,Final,Hematology
+LAB-015,PAT-002,VIS-006,2025-01-20,TSH,3016-3,3.2,mIU/L,0.4,4.0,Normal,Dr. Amy Nguyen,Final,Thyroid
+LAB-016,PAT-002,VIS-006,2025-01-20,Free T4,3024-7,1.1,ng/dL,0.8,1.8,Normal,Dr. Amy Nguyen,Final,Thyroid
+LAB-017,PAT-003,VIS-009,2024-12-01,Hemoglobin,718-7,11.8,g/dL,12.0,17.5,Low,Dr. Mark Stevens,Final,Hematology
+LAB-018,PAT-003,VIS-009,2024-12-01,Platelet Count,777-3,198,K/uL,150,400,Normal,Dr. Mark Stevens,Final,Hematology
+LAB-019,PAT-003,VIS-011,2025-03-20,Hemoglobin A1c,4548-4,7.9,%,4.0,5.6,High,Dr. Emily Park,Final,Diabetes
+LAB-020,PAT-003,VIS-011,2025-03-20,Fasting Glucose,1558-6,162,mg/dL,70,100,High,Dr. Emily Park,Final,Diabetes
+LAB-021,PAT-003,VIS-011,2025-03-20,Total Cholesterol,2093-3,228,mg/dL,0,200,High,Dr. Emily Park,Final,Lipid Panel
+LAB-022,PAT-003,VIS-011,2025-03-20,LDL Cholesterol,2089-1,145,mg/dL,0,100,High,Dr. Emily Park,Final,Lipid Panel
+LAB-023,PAT-003,VIS-080,2025-07-05,Hemoglobin A1c,4548-4,7.5,%,4.0,5.6,High,Dr. Emily Park,Final,Diabetes
+LAB-024,PAT-003,VIS-080,2025-07-05,Creatinine,2160-0,1.4,mg/dL,0.7,1.3,High,Dr. Emily Park,Final,Renal
+LAB-025,PAT-003,VIS-080,2025-07-05,eGFR,33914-3,52,mL/min/1.73m2,60,120,Low,Dr. Emily Park,Final,Renal
+LAB-026,PAT-005,VIS-016,2024-10-15,Arterial Blood Gas pH,2744-1,7.32,,7.35,7.45,Low,Dr. David Kim,Final,Pulmonary
+LAB-027,PAT-005,VIS-016,2024-10-15,pCO2,2019-8,52,mmHg,35,45,High,Dr. David Kim,Final,Pulmonary
+LAB-028,PAT-005,VIS-016,2024-10-15,pO2,2703-7,58,mmHg,80,100,Low,Dr. David Kim,Final,Pulmonary
+LAB-029,PAT-005,VIS-017,2024-12-20,CBC WBC,6690-2,8.5,K/uL,4.5,11.0,Normal,Dr. David Kim,Final,Hematology
+LAB-030,PAT-005,VIS-019,2025-02-10,Arterial Blood Gas pH,2744-1,7.30,,7.35,7.45,Low,Dr. David Kim,Final,Pulmonary
+LAB-031,PAT-005,VIS-019,2025-02-10,BNP,30934-4,320,pg/mL,0,100,High,Dr. David Kim,Final,Cardiac
+LAB-032,PAT-006,VIS-021,2025-01-08,BNP,30934-4,580,pg/mL,0,100,High,Dr. Lisa Wong,Final,Cardiac
+LAB-033,PAT-006,VIS-021,2025-01-08,Hemoglobin A1c,4548-4,8.5,%,4.0,5.6,High,Dr. Lisa Wong,Final,Diabetes
+LAB-034,PAT-006,VIS-022,2025-03-12,Hemoglobin A1c,4548-4,8.8,%,4.0,5.6,High,Dr. James Wilson,Final,Diabetes
+LAB-035,PAT-006,VIS-022,2025-03-12,Fasting Glucose,1558-6,198,mg/dL,70,100,High,Dr. James Wilson,Final,Diabetes
+LAB-036,PAT-006,VIS-022,2025-03-12,Creatinine,2160-0,1.6,mg/dL,0.6,1.2,High,Dr. James Wilson,Final,Renal
+LAB-037,PAT-006,VIS-022,2025-03-12,eGFR,33914-3,42,mL/min/1.73m2,60,120,Low,Dr. James Wilson,Final,Renal
+LAB-038,PAT-006,VIS-024,2025-07-10,BNP,30934-4,450,pg/mL,0,100,High,Dr. Lisa Wong,Final,Cardiac
+LAB-039,PAT-006,VIS-024,2025-07-10,Hemoglobin A1c,4548-4,9.1,%,4.0,5.6,High,Dr. Lisa Wong,Final,Diabetes
+LAB-040,PAT-007,VIS-025,2025-02-01,Total Cholesterol,2093-3,215,mg/dL,0,200,High,Dr. Rachel Kim,Final,Lipid Panel
+LAB-041,PAT-007,VIS-025,2025-02-01,Fasting Glucose,1558-6,95,mg/dL,70,100,Normal,Dr. Rachel Kim,Final,Diabetes
+LAB-042,PAT-007,VIS-025,2025-02-01,CBC WBC,6690-2,6.8,K/uL,4.5,11.0,Normal,Dr. Rachel Kim,Final,Hematology
+LAB-043,PAT-008,VIS-030,2025-06-05,CBC WBC,6690-2,5.9,K/uL,4.5,11.0,Normal,Dr. Sarah Chen,Final,Hematology
+LAB-044,PAT-008,VIS-030,2025-06-05,TSH,3016-3,2.1,mIU/L,0.4,4.0,Normal,Dr. Sarah Chen,Final,Thyroid
+LAB-045,PAT-008,VIS-030,2025-06-05,Vitamin D 25-OH,1989-3,22,ng/mL,30,100,Low,Dr. Sarah Chen,Final,Metabolic
+LAB-046,PAT-009,VIS-031,2024-11-20,Troponin I,10839-9,8.5,ng/mL,0,0.04,Critical,Dr. Lisa Wong,Final,Cardiac
+LAB-047,PAT-009,VIS-031,2024-11-20,CK-MB,13969-1,45,ng/mL,0,5,High,Dr. Lisa Wong,Final,Cardiac
+LAB-048,PAT-009,VIS-031,2024-11-20,Total Cholesterol,2093-3,268,mg/dL,0,200,High,Dr. Lisa Wong,Final,Lipid Panel
+LAB-049,PAT-009,VIS-031,2024-11-20,LDL Cholesterol,2089-1,182,mg/dL,0,100,High,Dr. Lisa Wong,Final,Lipid Panel
+LAB-050,PAT-009,VIS-032,2025-01-05,Troponin I,10839-9,0.02,ng/mL,0,0.04,Normal,Dr. Lisa Wong,Final,Cardiac
+LAB-051,PAT-009,VIS-032,2025-01-05,Hemoglobin A1c,4548-4,7.1,%,4.0,5.6,High,Dr. Lisa Wong,Final,Diabetes
+LAB-052,PAT-009,VIS-035,2025-07-01,LDL Cholesterol,2089-1,92,mg/dL,0,100,Normal,Dr. Lisa Wong,Final,Lipid Panel
+LAB-053,PAT-009,VIS-035,2025-07-01,Hemoglobin A1c,4548-4,6.8,%,4.0,5.6,High,Dr. Lisa Wong,Final,Diabetes
+LAB-054,PAT-010,VIS-036,2025-02-08,IgE Total,19113-0,450,IU/mL,0,100,High,Dr. Emily Park,Final,Allergy
+LAB-055,PAT-010,VIS-036,2025-02-08,CBC Eosinophils,711-2,8.5,%,0,5,High,Dr. Emily Park,Final,Hematology
+LAB-056,PAT-010,VIS-038,2025-06-30,CBC WBC,6690-2,7.0,K/uL,4.5,11.0,Normal,Dr. Emily Park,Final,Hematology
+LAB-057,PAT-011,VIS-039,2024-12-10,Blood Alcohol Level,5643-2,0.28,g/dL,0,0.08,Critical,Dr. Kevin Patel,Final,Toxicology
+LAB-058,PAT-011,VIS-040,2024-12-10,AST,1920-8,85,U/L,10,40,High,Dr. Sarah Chen,Final,Hepatic
+LAB-059,PAT-011,VIS-040,2024-12-10,ALT,1742-6,72,U/L,7,56,High,Dr. Sarah Chen,Final,Hepatic
+LAB-060,PAT-011,VIS-040,2024-12-10,GGT,2324-2,145,U/L,0,51,High,Dr. Sarah Chen,Final,Hepatic
+LAB-061,PAT-011,VIS-042,2025-04-05,AST,1920-8,62,U/L,10,40,High,Dr. Sarah Chen,Final,Hepatic
+LAB-062,PAT-011,VIS-042,2025-04-05,ALT,1742-6,58,U/L,7,56,High,Dr. Sarah Chen,Final,Hepatic
+LAB-063,PAT-011,VIS-042,2025-04-05,Albumin,1751-7,3.2,g/dL,3.5,5.5,Low,Dr. Sarah Chen,Final,Hepatic
+LAB-064,PAT-012,VIS-044,2025-01-12,ESR,4537-7,42,mm/hr,0,20,High,Dr. Andrea Bell,Final,Inflammatory
+LAB-065,PAT-012,VIS-044,2025-01-12,CRP,1988-5,2.8,mg/dL,0,0.5,High,Dr. Andrea Bell,Final,Inflammatory
+LAB-066,PAT-012,VIS-044,2025-01-12,Rheumatoid Factor,11572-5,85,IU/mL,0,14,High,Dr. Andrea Bell,Final,Autoimmune
+LAB-067,PAT-012,VIS-045,2025-03-28,ESR,4537-7,55,mm/hr,0,20,High,Dr. Andrea Bell,Final,Inflammatory
+LAB-068,PAT-012,VIS-045,2025-03-28,CRP,1988-5,3.5,mg/dL,0,0.5,High,Dr. Andrea Bell,Final,Inflammatory
+LAB-069,PAT-012,VIS-046,2025-06-10,CBC WBC,6690-2,9.2,K/uL,4.5,11.0,Normal,Dr. James Wilson,Final,Hematology
+LAB-070,PAT-012,VIS-046,2025-06-10,Vitamin D 25-OH,1989-3,18,ng/mL,30,100,Low,Dr. James Wilson,Final,Metabolic
+LAB-071,PAT-013,VIS-048,2025-05-08,Hemoglobin A1c,4548-4,6.9,%,4.0,5.6,High,Dr. Michael Brown,Final,Diabetes
+LAB-072,PAT-013,VIS-048,2025-05-08,PSA,2857-1,5.8,ng/mL,0,4.0,High,Dr. Michael Brown,Final,Prostate
+LAB-073,PAT-013,VIS-048,2025-05-08,Creatinine,2160-0,1.2,mg/dL,0.7,1.3,Normal,Dr. Michael Brown,Final,Renal
+LAB-074,PAT-013,VIS-048,2025-05-08,BUN,3094-0,22,mg/dL,7,20,High,Dr. Michael Brown,Final,Renal
+LAB-075,PAT-014,VIS-052,2025-06-22,TSH,3016-3,2.5,mIU/L,0.4,4.0,Normal,Dr. Rachel Kim,Final,Thyroid
+LAB-076,PAT-014,VIS-052,2025-06-22,CBC WBC,6690-2,6.1,K/uL,4.5,11.0,Normal,Dr. Rachel Kim,Final,Hematology
+LAB-077,PAT-014,VIS-052,2025-06-22,Vitamin B12,2132-9,310,pg/mL,200,900,Normal,Dr. Rachel Kim,Final,Metabolic
+LAB-078,PAT-015,VIS-053,2024-11-10,Hemoglobin A1c,4548-4,9.8,%,4.0,5.6,Critical,Dr. Emily Park,Final,Diabetes
+LAB-079,PAT-015,VIS-053,2024-11-10,Fasting Glucose,1558-6,245,mg/dL,70,100,Critical,Dr. Emily Park,Final,Diabetes
+LAB-080,PAT-015,VIS-053,2024-11-10,Creatinine,2160-0,1.8,mg/dL,0.7,1.3,High,Dr. Emily Park,Final,Renal
+LAB-081,PAT-015,VIS-053,2024-11-10,eGFR,33914-3,38,mL/min/1.73m2,60,120,Low,Dr. Emily Park,Final,Renal
+LAB-082,PAT-015,VIS-053,2024-11-10,Urine Albumin-Creatinine Ratio,9318-7,180,mg/g,0,30,High,Dr. Emily Park,Final,Renal
+LAB-083,PAT-015,VIS-054,2025-01-25,Fasting Glucose,1558-6,310,mg/dL,70,100,Critical,Dr. Kevin Patel,Final,Diabetes
+LAB-084,PAT-015,VIS-055,2025-03-08,Hemoglobin A1c,4548-4,9.2,%,4.0,5.6,Critical,Dr. Amy Nguyen,Final,Diabetes
+LAB-085,PAT-015,VIS-056,2025-05-30,Hemoglobin A1c,4548-4,8.6,%,4.0,5.6,High,Dr. Emily Park,Final,Diabetes
+LAB-086,PAT-015,VIS-056,2025-05-30,Creatinine,2160-0,1.7,mg/dL,0.7,1.3,High,Dr. Emily Park,Final,Renal
+LAB-087,PAT-015,VIS-056,2025-05-30,LDL Cholesterol,2089-1,165,mg/dL,0,100,High,Dr. Emily Park,Final,Lipid Panel
+LAB-088,PAT-016,VIS-058,2025-02-05,CBC WBC,6690-2,6.5,K/uL,4.5,11.0,Normal,Dr. James Wilson,Final,Hematology
+LAB-089,PAT-016,VIS-058,2025-02-05,Vitamin D 25-OH,1989-3,15,ng/mL,30,100,Low,Dr. James Wilson,Final,Metabolic
+LAB-090,PAT-016,VIS-058,2025-02-05,Ferritin,2276-4,18,ng/mL,12,150,Normal,Dr. James Wilson,Final,Hematology
+LAB-091,PAT-017,VIS-061,2024-10-25,CBC WBC,6690-2,11.2,K/uL,4.5,11.0,High,Dr. Patricia Huang,Final,Hematology
+LAB-092,PAT-017,VIS-061,2024-10-25,Hemoglobin,718-7,10.8,g/dL,12.0,17.5,Low,Dr. Patricia Huang,Final,Hematology
+LAB-093,PAT-017,VIS-063,2025-01-15,CBC WBC,6690-2,3.8,K/uL,4.5,11.0,Low,Dr. Patricia Huang,Final,Hematology
+LAB-094,PAT-017,VIS-063,2025-01-15,Hemoglobin,718-7,9.5,g/dL,12.0,17.5,Low,Dr. Patricia Huang,Final,Hematology
+LAB-095,PAT-017,VIS-065,2025-05-12,CBC WBC,6690-2,0.8,K/uL,4.5,11.0,Critical,Dr. Kevin Patel,Final,Hematology
+LAB-096,PAT-017,VIS-065,2025-05-12,ANC,26499-4,0.3,K/uL,1.5,8.0,Critical,Dr. Kevin Patel,Final,Hematology
+LAB-097,PAT-018,VIS-067,2025-01-18,Hemoglobin,718-7,10.5,g/dL,11.0,15.0,Low,Dr. Rebecca Torres,Final,Hematology
+LAB-098,PAT-018,VIS-067,2025-01-18,Fasting Glucose,1558-6,82,mg/dL,70,100,Normal,Dr. Rebecca Torres,Final,Diabetes
+LAB-099,PAT-018,VIS-068,2025-03-18,Hemoglobin,718-7,10.8,g/dL,11.0,15.0,Low,Dr. Rebecca Torres,Final,Hematology
+LAB-100,PAT-018,VIS-068,2025-03-18,Glucose Challenge,2345-7,128,mg/dL,0,140,Normal,Dr. Rebecca Torres,Final,Diabetes
+LAB-101,PAT-019,VIS-071,2024-11-30,Total Cholesterol,2093-3,255,mg/dL,0,200,High,Dr. Alan Foster,Final,Lipid Panel
+LAB-102,PAT-019,VIS-071,2024-11-30,LDL Cholesterol,2089-1,170,mg/dL,0,100,High,Dr. Alan Foster,Final,Lipid Panel
+LAB-103,PAT-019,VIS-071,2024-11-30,Hemoglobin A1c,4548-4,6.5,%,4.0,5.6,High,Dr. Alan Foster,Final,Diabetes
+LAB-104,PAT-019,VIS-071,2024-11-30,INR,6301-6,1.0,,0.8,1.2,Normal,Dr. Alan Foster,Final,Coagulation
+LAB-105,PAT-019,VIS-073,2025-03-25,INR,6301-6,2.5,,2.0,3.0,Normal,Dr. Sarah Chen,Final,Coagulation
+LAB-106,PAT-019,VIS-073,2025-03-25,LDL Cholesterol,2089-1,85,mg/dL,0,100,Normal,Dr. Sarah Chen,Final,Lipid Panel
+LAB-107,PAT-019,VIS-074,2025-06-08,Hemoglobin A1c,4548-4,6.3,%,4.0,5.6,High,Dr. Alan Foster,Final,Diabetes
+LAB-108,PAT-020,VIS-075,2025-01-05,Vitamin D 25-OH,1989-3,19,ng/mL,30,100,Low,Dr. Michael Brown,Final,Metabolic
+LAB-109,PAT-020,VIS-075,2025-01-05,Calcium,17861-6,9.2,mg/dL,8.5,10.5,Normal,Dr. Michael Brown,Final,Metabolic
+LAB-110,PAT-020,VIS-076,2025-03-15,DEXA T-Score Spine,46278-8,-2.8,SD,-1.0,99,Low,Dr. Amy Nguyen,Final,Bone Density
+LAB-111,PAT-020,VIS-076,2025-03-15,DEXA T-Score Hip,46278-8,-2.5,SD,-1.0,99,Low,Dr. Amy Nguyen,Final,Bone Density
+LAB-112,PAT-020,VIS-076,2025-03-15,Vitamin D 25-OH,1989-3,24,ng/mL,30,100,Low,Dr. Amy Nguyen,Final,Metabolic

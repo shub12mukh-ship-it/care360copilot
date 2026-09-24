@@ -1,0 +1,71 @@
+medication_id,patient_id,visit_id,medication_name,generic_name,ndc_code,dosage,route,frequency,prescribing_provider,start_date,end_date,status,refills_remaining,pharmacy,indication,drug_class
+MED-001,PAT-001,VIS-001,Metformin 1000mg,Metformin HCl,00378-7252-01,1000 mg,Oral,Twice daily,Dr. Sarah Chen,2018-03-15,,Active,5,Springfield Pharmacy,Type 2 Diabetes,Biguanide
+MED-002,PAT-001,VIS-001,Glipizide 10mg,Glipizide,00378-1110-01,10 mg,Oral,Once daily,Dr. Sarah Chen,2023-06-01,,Active,3,Springfield Pharmacy,Type 2 Diabetes,Sulfonylurea
+MED-003,PAT-001,VIS-001,Lisinopril 20mg,Lisinopril,00378-0860-01,20 mg,Oral,Once daily,Dr. Sarah Chen,2019-06-20,,Active,5,Springfield Pharmacy,Hypertension,ACE Inhibitor
+MED-004,PAT-001,VIS-004,Atorvastatin 40mg,Atorvastatin Calcium,00378-3952-01,40 mg,Oral,Once daily at bedtime,Dr. Lisa Wong,2025-06-01,,Active,5,Springfield Pharmacy,Dyslipidemia,Statin
+MED-005,PAT-001,VIS-004,Aspirin 81mg,Aspirin,00536-1053-01,81 mg,Oral,Once daily,Dr. Lisa Wong,2025-06-01,,Active,11,Springfield Pharmacy,CAD Prevention,Antiplatelet
+MED-006,PAT-001,VIS-004,Metoprolol Succinate 50mg,Metoprolol Succinate ER,00378-6150-01,50 mg,Oral,Once daily,Dr. Lisa Wong,2025-06-01,,Active,5,Springfield Pharmacy,Heart Disease,Beta Blocker
+MED-007,PAT-002,VIS-006,Levothyroxine 75mcg,Levothyroxine Sodium,00378-1875-01,75 mcg,Oral,Once daily before breakfast,Dr. Amy Nguyen,2022-05-10,,Active,5,Central Pharmacy,Hypothyroidism,Thyroid Hormone
+MED-008,PAT-002,VIS-007,Ibuprofen 400mg,Ibuprofen,00904-7915-60,400 mg,Oral,Every 6 hours as needed,Dr. James Wilson,2025-04-10,2025-05-10,Completed,0,Central Pharmacy,Low Back Pain,NSAID
+MED-009,PAT-002,VIS-008,Sumatriptan 50mg,Sumatriptan Succinate,00378-5280-01,50 mg,Oral,As needed for migraine,Dr. Kevin Patel,2025-06-15,,Active,2,Central Pharmacy,Migraine,Triptan
+MED-010,PAT-003,VIS-011,Metformin 500mg,Metformin HCl,00378-7250-01,500 mg,Oral,Twice daily,Dr. Emily Park,2016-09-12,,Active,5,Springfield Pharmacy,Type 2 Diabetes,Biguanide
+MED-011,PAT-003,VIS-012,Amlodipine 10mg,Amlodipine Besylate,00378-0188-01,10 mg,Oral,Once daily,Dr. Emily Park,2015-04-05,,Active,5,Springfield Pharmacy,Hypertension,Calcium Channel Blocker
+MED-012,PAT-003,VIS-011,Atorvastatin 20mg,Atorvastatin Calcium,00378-3950-01,20 mg,Oral,Once daily at bedtime,Dr. Emily Park,2017-01-20,,Active,5,Springfield Pharmacy,Hypercholesterolemia,Statin
+MED-013,PAT-003,VIS-009,Enoxaparin 40mg,Enoxaparin Sodium,00409-2720-01,40 mg,Subcutaneous,Once daily,Dr. Mark Stevens,2024-12-01,2025-01-15,Completed,0,Springfield Pharmacy,DVT Prophylaxis,Anticoagulant
+MED-014,PAT-004,VIS-014,Amoxicillin 500mg,Amoxicillin,00093-4150-01,500 mg,Oral,Three times daily,Dr. Michael Brown,2025-04-22,2025-05-02,Completed,0,Central Pharmacy,Upper Respiratory Infection,Antibiotic
+MED-015,PAT-005,VIS-016,Tiotropium 18mcg,Tiotropium Bromide,00597-0075-41,18 mcg,Inhalation,Once daily,Dr. David Kim,2012-06-30,,Active,5,Springfield Pharmacy,COPD,Anticholinergic
+MED-016,PAT-005,VIS-016,Albuterol HFA 90mcg,Albuterol Sulfate,00173-0682-20,90 mcg/actuation,Inhalation,Every 4-6 hours as needed,Dr. David Kim,2012-06-30,,Active,5,Springfield Pharmacy,COPD/Bronchospasm,Beta-2 Agonist
+MED-017,PAT-005,VIS-019,Prednisone 40mg,Prednisone,00378-0145-01,40 mg,Oral,Once daily taper over 10 days,Dr. David Kim,2025-02-10,2025-02-20,Completed,0,Springfield Pharmacy,COPD Exacerbation,Corticosteroid
+MED-018,PAT-005,VIS-020,Fluticasone/Salmeterol 250/50,Fluticasone/Salmeterol,00173-0717-00,250/50 mcg,Inhalation,Twice daily,Dr. David Kim,2025-04-15,,Active,5,Springfield Pharmacy,COPD Maintenance,ICS/LABA
+MED-019,PAT-006,VIS-021,Furosemide 40mg,Furosemide,00378-0216-01,40 mg,Oral,Once daily,Dr. Lisa Wong,2021-11-01,,Active,5,Central Pharmacy,Heart Failure,Loop Diuretic
+MED-020,PAT-006,VIS-021,Carvedilol 25mg,Carvedilol,00378-1165-01,25 mg,Oral,Twice daily,Dr. Lisa Wong,2021-11-01,,Active,5,Central Pharmacy,Heart Failure,Beta Blocker
+MED-021,PAT-006,VIS-021,Lisinopril 10mg,Lisinopril,00378-0858-01,10 mg,Oral,Once daily,Dr. Lisa Wong,2014-02-10,,Active,5,Central Pharmacy,Hypertension/HF,ACE Inhibitor
+MED-022,PAT-006,VIS-022,Metformin 1000mg,Metformin HCl,00378-7252-01,1000 mg,Oral,Twice daily,Dr. James Wilson,2017-08-20,,Active,3,Central Pharmacy,Type 2 Diabetes,Biguanide
+MED-023,PAT-006,VIS-022,Sitagliptin 100mg,Sitagliptin Phosphate,00006-0277-31,100 mg,Oral,Once daily,Dr. James Wilson,2025-03-12,,Active,5,Central Pharmacy,Type 2 Diabetes,DPP-4 Inhibitor
+MED-024,PAT-007,VIS-026,Omeprazole 20mg,Omeprazole,00378-6220-01,20 mg,Oral,Once daily before breakfast,Dr. Steven Cho,2025-04-18,,Active,5,Central Pharmacy,GERD,Proton Pump Inhibitor
+MED-025,PAT-007,VIS-027,Acetaminophen 500mg,Acetaminophen,00904-1982-60,500 mg,Oral,Every 6 hours as needed,Dr. Rachel Kim,2025-06-20,,Active,3,Central Pharmacy,Osteoarthritis Pain,Analgesic
+MED-026,PAT-007,VIS-025,Losartan 50mg,Losartan Potassium,00378-0185-01,50 mg,Oral,Once daily,Dr. Rachel Kim,2020-09-15,,Active,5,Central Pharmacy,Hypertension,ARB
+MED-027,PAT-008,VIS-028,Sertraline 100mg,Sertraline HCl,00378-4187-01,100 mg,Oral,Once daily,Dr. Sarah Chen,2021-03-10,,Active,5,Wellness Pharmacy,Anxiety/Depression,SSRI
+MED-028,PAT-008,VIS-029,Buspirone 10mg,Buspirone HCl,00378-1165-05,10 mg,Oral,Twice daily,Dr. Nina Patel,2025-03-30,,Active,5,Wellness Pharmacy,Anxiety,Anxiolytic
+MED-029,PAT-009,VIS-032,Clopidogrel 75mg,Clopidogrel Bisulfate,00378-6275-01,75 mg,Oral,Once daily,Dr. Lisa Wong,2024-11-20,,Active,5,Springfield Pharmacy,Post-MI,Antiplatelet
+MED-030,PAT-009,VIS-032,Aspirin 81mg,Aspirin,00536-1053-01,81 mg,Oral,Once daily,Dr. Lisa Wong,2024-11-20,,Active,11,Springfield Pharmacy,Post-MI Prevention,Antiplatelet
+MED-031,PAT-009,VIS-032,Atorvastatin 80mg,Atorvastatin Calcium,00378-3955-01,80 mg,Oral,Once daily at bedtime,Dr. Lisa Wong,2024-11-20,,Active,5,Springfield Pharmacy,Post-MI Lipid Mgmt,Statin
+MED-032,PAT-009,VIS-032,Metoprolol Succinate 100mg,Metoprolol Succinate ER,00378-6151-01,100 mg,Oral,Once daily,Dr. Lisa Wong,2024-11-20,,Active,5,Springfield Pharmacy,Post-MI/HTN,Beta Blocker
+MED-033,PAT-009,VIS-032,Lisinopril 20mg,Lisinopril,00378-0860-01,20 mg,Oral,Once daily,Dr. Lisa Wong,2016-07-22,,Active,5,Springfield Pharmacy,Hypertension,ACE Inhibitor
+MED-034,PAT-009,VIS-032,Metformin 500mg,Metformin HCl,00378-7250-01,500 mg,Oral,Twice daily,Dr. Lisa Wong,2019-05-10,,Active,5,Springfield Pharmacy,Type 2 Diabetes,Biguanide
+MED-035,PAT-010,VIS-036,Montelukast 10mg,Montelukast Sodium,00378-6072-01,10 mg,Oral,Once daily at bedtime,Dr. Emily Park,2015-01-20,,Active,5,Central Pharmacy,Asthma,Leukotriene Modifier
+MED-036,PAT-010,VIS-036,Fluticasone 110mcg HFA,Fluticasone Propionate,00173-0719-20,110 mcg,Inhalation,Twice daily,Dr. Emily Park,2015-01-20,,Active,5,Central Pharmacy,Asthma,Inhaled Corticosteroid
+MED-037,PAT-010,VIS-036,Albuterol HFA 90mcg,Albuterol Sulfate,00173-0682-20,90 mcg/actuation,Inhalation,Every 4-6 hours as needed,Dr. Emily Park,2015-01-20,,Active,5,Central Pharmacy,Asthma Rescue,Beta-2 Agonist
+MED-038,PAT-010,VIS-037,Cetirizine 10mg,Cetirizine HCl,00904-5852-61,10 mg,Oral,Once daily,Dr. Thomas Reed,2025-04-25,,Active,5,Central Pharmacy,Allergic Rhinitis,Antihistamine
+MED-039,PAT-011,VIS-040,Chlordiazepoxide 25mg,Chlordiazepoxide HCl,00378-2125-01,25 mg,Oral,Every 6 hours taper,Dr. Sarah Chen,2024-12-10,2024-12-17,Completed,0,Springfield Pharmacy,Alcohol Withdrawal,Benzodiazepine
+MED-040,PAT-011,VIS-040,Thiamine 100mg,Thiamine HCl,00904-6066-60,100 mg,Oral,Once daily,Dr. Sarah Chen,2024-12-10,,Active,5,Springfield Pharmacy,Nutritional Support,Vitamin
+MED-041,PAT-011,VIS-040,Folic Acid 1mg,Folic Acid,00378-0802-01,1 mg,Oral,Once daily,Dr. Sarah Chen,2024-12-10,,Active,5,Springfield Pharmacy,Nutritional Support,Vitamin
+MED-042,PAT-011,VIS-041,Naltrexone 50mg,Naltrexone HCl,00378-0348-01,50 mg,Oral,Once daily,Dr. Nina Patel,2025-01-20,,Active,5,Springfield Pharmacy,Alcohol Dependence,Opioid Antagonist
+MED-043,PAT-012,VIS-044,Methotrexate 15mg,Methotrexate,00378-0310-01,15 mg,Oral,Once weekly,Dr. Andrea Bell,2019-10-05,,Active,5,Central Pharmacy,Rheumatoid Arthritis,DMARD
+MED-044,PAT-012,VIS-044,Folic Acid 1mg,Folic Acid,00378-0802-01,1 mg,Oral,Daily except MTX day,Dr. Andrea Bell,2019-10-05,,Active,5,Central Pharmacy,MTX Side Effect Prevention,Vitamin
+MED-045,PAT-012,VIS-045,Hydroxychloroquine 200mg,Hydroxychloroquine Sulfate,00378-0218-01,200 mg,Oral,Twice daily,Dr. Andrea Bell,2025-03-28,,Active,5,Central Pharmacy,Rheumatoid Arthritis,DMARD
+MED-046,PAT-012,VIS-044,Prednisone 5mg,Prednisone,00378-0141-01,5 mg,Oral,Once daily,Dr. Andrea Bell,2025-01-12,,Active,3,Central Pharmacy,RA Inflammation,Corticosteroid
+MED-047,PAT-013,VIS-047,Tamsulosin 0.4mg,Tamsulosin HCl,00378-7200-01,0.4 mg,Oral,Once daily 30min after same meal,Dr. Brian Moore,2021-07-10,,Active,5,Springfield Pharmacy,BPH,Alpha Blocker
+MED-048,PAT-013,VIS-048,Amlodipine 5mg,Amlodipine Besylate,00378-0186-01,5 mg,Oral,Once daily,Dr. Michael Brown,2013-11-25,,Active,5,Springfield Pharmacy,Hypertension,Calcium Channel Blocker
+MED-049,PAT-013,VIS-048,Metformin 500mg,Metformin HCl,00378-7250-01,500 mg,Oral,Once daily,Dr. Michael Brown,2018-03-01,,Active,5,Springfield Pharmacy,Type 2 Diabetes,Biguanide
+MED-050,PAT-014,VIS-050,Escitalopram 10mg,Escitalopram Oxalate,00378-5210-01,10 mg,Oral,Once daily,Dr. Rachel Kim,2020-09-12,,Active,5,Wellness Pharmacy,Depression,SSRI
+MED-051,PAT-014,VIS-051,Trazodone 50mg,Trazodone HCl,00378-5050-01,50 mg,Oral,Once daily at bedtime,Dr. Nina Patel,2025-04-15,,Active,5,Wellness Pharmacy,Insomnia/Depression,SARI
+MED-052,PAT-015,VIS-053,Metformin 1000mg,Metformin HCl,00378-7252-01,1000 mg,Oral,Twice daily,Dr. Emily Park,2014-02-28,,Active,3,Springfield Pharmacy,Type 2 Diabetes,Biguanide
+MED-053,PAT-015,VIS-055,Insulin Glargine 30 units,Insulin Glargine,00088-2220-33,30 units,Subcutaneous,Once daily at bedtime,Dr. Amy Nguyen,2025-03-08,,Active,5,Springfield Pharmacy,Type 2 Diabetes,Long-Acting Insulin
+MED-054,PAT-015,VIS-053,Lisinopril 40mg,Lisinopril,00378-0862-01,40 mg,Oral,Once daily,Dr. Emily Park,2016-05-10,,Active,5,Springfield Pharmacy,Hypertension/Renal,ACE Inhibitor
+MED-055,PAT-015,VIS-053,Atorvastatin 40mg,Atorvastatin Calcium,00378-3952-01,40 mg,Oral,Once daily at bedtime,Dr. Emily Park,2015-08-20,,Active,5,Springfield Pharmacy,Dyslipidemia,Statin
+MED-056,PAT-016,VIS-058,Pregabalin 75mg,Pregabalin,00071-1014-68,75 mg,Oral,Twice daily,Dr. James Wilson,2021-01-15,,Active,3,Central Pharmacy,Fibromyalgia,Anticonvulsant/Analgesic
+MED-057,PAT-016,VIS-059,Duloxetine 60mg,Duloxetine HCl,00002-3235-30,60 mg,Oral,Once daily,Dr. Carlos Ruiz,2025-04-20,,Active,5,Central Pharmacy,Fibromyalgia/Pain,SNRI
+MED-058,PAT-016,VIS-058,Cyclobenzaprine 10mg,Cyclobenzaprine HCl,00378-0415-01,10 mg,Oral,Once daily at bedtime,Dr. James Wilson,2021-06-20,,Active,3,Central Pharmacy,Muscle Spasm,Muscle Relaxant
+MED-059,PAT-017,VIS-062,Carboplatin/Paclitaxel,Carboplatin/Paclitaxel,N/A,AUC5/175mg/m2,Intravenous,Every 3 weeks,Dr. Patricia Huang,2024-12-15,,Active,0,Oncology Infusion Center,Lung Cancer,Chemotherapy
+MED-060,PAT-017,VIS-062,Ondansetron 8mg,Ondansetron HCl,00378-0352-01,8 mg,Oral,Every 8 hours as needed,Dr. Patricia Huang,2024-12-15,,Active,5,Springfield Pharmacy,Chemo Nausea,Antiemetic
+MED-061,PAT-017,VIS-065,Filgrastim 300mcg,Filgrastim,55513-0924-01,300 mcg,Subcutaneous,Once daily for 5 days,Dr. Patricia Huang,2025-05-13,2025-05-18,Completed,0,Oncology Infusion Center,Neutropenia,Colony Stimulating Factor
+MED-062,PAT-018,VIS-067,Prenatal Vitamins,Prenatal Multivitamin,00904-6215-60,1 tablet,Oral,Once daily,Dr. Rebecca Torres,2025-01-18,,Active,5,Central Pharmacy,Pregnancy Nutrition,Vitamin
+MED-063,PAT-018,VIS-067,Ferrous Sulfate 325mg,Ferrous Sulfate,00904-7590-60,325 mg,Oral,Once daily,Dr. Rebecca Torres,2025-01-18,,Active,5,Central Pharmacy,Iron Deficiency Anemia,Iron Supplement
+MED-064,PAT-019,VIS-071,Warfarin 5mg,Warfarin Sodium,00378-2085-01,5 mg,Oral,Once daily,Dr. Alan Foster,2024-11-30,,Active,5,Springfield Pharmacy,Stroke/AFib,Anticoagulant
+MED-065,PAT-019,VIS-072,Atorvastatin 80mg,Atorvastatin Calcium,00378-3955-01,80 mg,Oral,Once daily at bedtime,Dr. Alan Foster,2024-11-30,,Active,5,Springfield Pharmacy,Post-Stroke Lipids,Statin
+MED-066,PAT-019,VIS-072,Amlodipine 10mg,Amlodipine Besylate,00378-0188-01,10 mg,Oral,Once daily,Dr. Alan Foster,2015-10-05,,Active,5,Springfield Pharmacy,Hypertension,Calcium Channel Blocker
+MED-067,PAT-019,VIS-072,Metformin 500mg,Metformin HCl,00378-7250-01,500 mg,Oral,Once daily,Dr. Alan Foster,2020-01-15,,Active,5,Springfield Pharmacy,Type 2 Diabetes,Biguanide
+MED-068,PAT-020,VIS-075,Alendronate 70mg,Alendronate Sodium,00378-4165-01,70 mg,Oral,Once weekly,Dr. Michael Brown,2019-04-22,,Active,5,Central Pharmacy,Osteoporosis,Bisphosphonate
+MED-069,PAT-020,VIS-076,Calcium 600mg + Vitamin D 800IU,Calcium Carbonate/Cholecalciferol,00904-5810-60,600 mg/800 IU,Oral,Twice daily,Dr. Amy Nguyen,2023-07-10,,Active,5,Central Pharmacy,Osteoporosis/Vit D,Mineral Supplement
+MED-070,PAT-020,VIS-075,Hydrochlorothiazide 12.5mg,Hydrochlorothiazide,00378-0218-05,12.5 mg,Oral,Once daily,Dr. Michael Brown,2010-06-15,,Active,5,Central Pharmacy,Hypertension,Thiazide Diuretic
