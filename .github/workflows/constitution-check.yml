@@ -1,0 +1,594 @@
+name: Constitution Compliance Check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────
+  # CORE PRINCIPLES (I-V) — Original project-specific checks
+  # ──────────────────────────────────────────────────────────────────────
+  core-principles:
+    name: "Core Principles (I-V)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "I. Patient Safety - No diagnostic language in prompts"
+        run: |
+          echo "Checking that system prompts do not make diagnoses or predictions..."
+          VIOLATIONS=0
+
+          if grep -rn --include="*.py" -iE \
+            '(you are a doctor|you are a physician|diagnose|provide a diagnosis|predict (the |patient )?outcome|prescribe|recommend treatment)' \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            echo "::error::PRINCIPLE I VIOLATION: Found diagnostic/prescriptive language in Python files."
+            VIOLATIONS=1
+          fi
+
+          if grep -rn --include="*.yaml" --include="*.yml" -iE \
+            '(you are a doctor|you are a physician|diagnose the patient|predict (the |patient )?outcome|prescribe medication)' \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            echo "::error::PRINCIPLE I VIOLATION: Found diagnostic language in agent spec YAML."
+            VIOLATIONS=1
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS"
+
+      - name: "II. Evidence-Cited Responses - Citation enforcement"
+        run: |
+          VIOLATIONS=0
+
+          if [ -f app/streamlit_app.py ]; then
+            if ! grep -q -iE '(citation|cite|source document|page number)' app/streamlit_app.py; then
+              echo "::error::PRINCIPLE II VIOLATION: app/streamlit_app.py lacks citation enforcement."
+              VIOLATIONS=1
+            fi
+          fi
+
+          if [ -f agent_spec.yaml ]; then
+            if ! grep -q -iE '(citation|cite|source document|page number)' agent_spec.yaml; then
+              echo "::error::PRINCIPLE II VIOLATION: agent_spec.yaml lacks citation requirements."
+              VIOLATIONS=1
+            fi
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS"
+
+      - name: "III. Snowflake-Native - No external API/LLM dependencies"
+        run: |
+          VIOLATIONS=0
+
+          EXTERNAL_PATTERNS='(import openai|from openai|import anthropic|from anthropic|import cohere|from cohere|import google\.generativeai|api\.openai\.com|api\.anthropic\.com|api\.cohere\.ai)'
+          if grep -rn --include="*.py" -E "$EXTERNAL_PATTERNS" \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            echo "::error::PRINCIPLE III VIOLATION: External LLM provider detected."
+            VIOLATIONS=1
+          fi
+
+          if [ -f requirements.txt ]; then
+            BANNED="openai|anthropic|cohere|google-generativeai|langchain|llama-index|boto3|azure-ai"
+            if grep -iE "$BANNED" requirements.txt; then
+              echo "::error::PRINCIPLE III VIOLATION: Banned external dependency in requirements.txt."
+              VIOLATIONS=1
+            fi
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS"
+
+      - name: "IV. Synthetic Data & PHI Boundary"
+        run: |
+          VIOLATIONS=0
+
+          for f in data/*.csv; do
+            if [ -f "$f" ]; then
+              if grep -oE 'P[0-9]{4,}' "$f" | grep -vE '^P10(0[1-9]|1[0-9]|20)$' | head -5 | grep -q .; then
+                echo "::error::PRINCIPLE IV VIOLATION: $f contains patient IDs outside synthetic range P1001-P1020."
+                VIOLATIONS=1
+              fi
+            fi
+          done
+
+          if grep -rn --include="*.csv" --include="*.py" --include="*.sql" -E \
+            '[0-9]{3}-[0-9]{2}-[0-9]{4}' \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            echo "::error::PRINCIPLE IV VIOLATION: Possible SSN pattern detected."
+            VIOLATIONS=1
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS"
+
+      - name: "V. Layered Data Pipeline - Schema boundaries"
+        run: |
+          VIOLATIONS=0
+
+          for f in sql/patient360.sql; do
+            if [ -f "$f" ]; then
+              if grep -inE 'FROM\s+(CARE360_DB\.)?RAW\.' "$f"; then
+                echo "::error::PRINCIPLE V VIOLATION: $f references RAW directly. ANALYTICS must read from CURATED."
+                VIOLATIONS=1
+              fi
+            fi
+          done
+
+          for f in sql/transform.sql; do
+            if [ -f "$f" ]; then
+              if grep -inE 'FROM\s+(CARE360_DB\.)?ANALYTICS\.' "$f"; then
+                echo "::error::PRINCIPLE V VIOLATION: $f references ANALYTICS. CURATED must read from RAW only."
+                VIOLATIONS=1
+              fi
+            fi
+          done
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS"
+
+  # ──────────────────────────────────────────────────────────────────────
+  # REGULATORY COMPLIANCE (VI-VIII) — Healthcare regulatory standards
+  # ──────────────────────────────────────────────────────────────────────
+  regulatory-compliance:
+    name: "Regulatory Compliance (VI-VIII)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "VI. Data Privacy - No secrets or credentials in code"
+        run: |
+          echo "Scanning for hardcoded secrets, API keys, and credentials..."
+          VIOLATIONS=0
+
+          # Detect hardcoded passwords, API keys, tokens, connection strings
+          SECRET_PATTERNS='(password\s*=\s*["\x27][^"\x27]{4,}|api[_-]?key\s*=\s*["\x27][^"\x27]{8,}|secret[_-]?key\s*=\s*["\x27]|token\s*=\s*["\x27][A-Za-z0-9+/=]{20,}|-----BEGIN (RSA |EC )?PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[a-zA-Z0-9]{20,})'
+          if grep -rn --include="*.py" --include="*.sql" --include="*.yaml" --include="*.yml" \
+            --include="*.json" --include="*.toml" --include="*.cfg" --include="*.ini" \
+            -E "$SECRET_PATTERNS" \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude \
+            --exclude="*.example" --exclude="*.template" . ; then
+            echo ""
+            echo "::error::PRINCIPLE VI VIOLATION (HIPAA/GDPR/DPDP): Possible hardcoded secret or credential detected."
+            echo "Secrets MUST be stored in environment variables or a secrets manager, never in source code."
+            VIOLATIONS=1
+          fi
+
+          # Check for .env files that should not be committed
+          if find . -name ".env" -not -path "./.specify/*" -not -path "./.github/*" -not -path "./.claude/*" | grep -q .; then
+            ENV_FILES=$(find . -name ".env" -not -path "./.specify/*" -not -path "./.github/*" -not -path "./.claude/*")
+            echo "::error::PRINCIPLE VI VIOLATION: .env file(s) found in repository: $ENV_FILES"
+            echo ".env files MUST be in .gitignore and never committed."
+            VIOLATIONS=1
+          fi
+
+          # Verify .gitignore blocks sensitive files
+          if [ -f .gitignore ]; then
+            for pattern in ".env" "*.pem" "*.key" "credentials.json"; do
+              if ! grep -qF "$pattern" .gitignore; then
+                echo "::warning::PRINCIPLE VI: .gitignore missing pattern '$pattern'. Sensitive files may be accidentally committed."
+              fi
+            done
+          else
+            echo "::warning::PRINCIPLE VI: No .gitignore file found. Sensitive files may be accidentally committed."
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS: No hardcoded secrets detected."
+
+      - name: "VI. Data Privacy - No PHI/PII in logs or error messages"
+        run: |
+          echo "Scanning for patient data leakage in logging and error handling..."
+          VIOLATIONS=0
+
+          # Check for logging statements that might include patient data fields
+          PHI_LOG_PATTERNS='(log(ging)?|logger|print|st\.error|st\.warning)\s*\(.*\b(patient_name|patient_id|ssn|social_security|date_of_birth|dob|address|phone|email|diagnosis|medication)\b'
+          if grep -rn --include="*.py" -iE "$PHI_LOG_PATTERNS" \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            echo ""
+            echo "::warning::PRINCIPLE VI: Possible PHI/PII in logging or error output. Review to ensure no real patient data is logged."
+          fi
+
+          # Check for f-strings or format strings in exception handlers that reference patient fields
+          EXCEPTION_PHI='except.*:\s*\n.*\b(patient_name|ssn|social_security|date_of_birth)\b'
+          if grep -rn --include="*.py" -A2 'except.*:' \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . \
+            | grep -iE '(patient_name|ssn|social_security|date_of_birth|phone_number)' ; then
+            echo ""
+            echo "::warning::PRINCIPLE VI: Possible PHI in exception handler. Error messages MUST NOT expose patient data."
+          fi
+
+          echo "PASS: PHI-in-logs check complete."
+
+      - name: "VII. SaMD Classification - No autonomous clinical actions"
+        run: |
+          echo "Checking that no feature makes autonomous clinical decisions..."
+          VIOLATIONS=0
+
+          # Detect code that might auto-prescribe, auto-diagnose, or auto-order
+          SAMD_PATTERNS='(auto[_-]?(prescribe|diagnose|order|treat)|place[_-]?order|send[_-]?prescription|schedule[_-]?treatment|initiate[_-]?therapy)'
+          if grep -rn --include="*.py" --include="*.sql" --include="*.yaml" -iE "$SAMD_PATTERNS" \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            echo ""
+            echo "::error::PRINCIPLE VII VIOLATION (SaMD): Code that automates clinical actions detected."
+            echo "The app MUST present findings for clinician review, never take autonomous clinical action."
+            echo "Any feature driving clinical decisions without human confirmation changes the SaMD classification."
+            VIOLATIONS=1
+          fi
+
+          # Verify the app still declares itself as decision-support, not autonomous
+          if [ -f app/streamlit_app.py ]; then
+            if grep -iE '(automated diagnosis|autonomous treatment|auto-prescri)' app/streamlit_app.py; then
+              echo "::error::PRINCIPLE VII VIOLATION: App contains language suggesting autonomous clinical capability."
+              VIOLATIONS=1
+            fi
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS: No autonomous clinical actions detected."
+
+      - name: "VIII. Quality Standards - Traceability & documentation"
+        run: |
+          echo "Checking engineering lifecycle documentation requirements..."
+          WARNINGS=0
+
+          # IEC 62304: Verify architecture documentation exists
+          if [ ! -f docs/architecture.md ]; then
+            echo "::error::PRINCIPLE VIII VIOLATION (IEC 62304): docs/architecture.md missing. Software architecture MUST be documented."
+            exit 1
+          fi
+
+          # IEC 62304: Verify testing documentation exists
+          if [ ! -f docs/testing.md ]; then
+            echo "::error::PRINCIPLE VIII VIOLATION (IEC 62304): docs/testing.md missing. Verification procedures MUST be documented."
+            exit 1
+          fi
+
+          # ISO 14971: Check for risk documentation
+          if [ ! -f docs/risk-management.md ] && [ ! -f docs/risk_management.md ] && [ ! -f docs/risks.md ]; then
+            echo "::warning::PRINCIPLE VIII (ISO 14971): No risk management document found (docs/risk-management.md)."
+            echo "Risk analysis SHOULD be maintained and updated when features change."
+            WARNINGS=1
+          fi
+
+          # ISO 13485: Check for change traceability - PRs should reference requirements
+          echo "Quality documentation checks complete."
+          echo "PASS (with $WARNINGS warning(s))"
+
+  # ──────────────────────────────────────────────────────────────────────
+  # STRUCTURAL COMPLIANCE — RBAC, encryption, audit logs, consent
+  # ──────────────────────────────────────────────────────────────────────
+  structural-compliance:
+    name: "Structural Compliance (RBAC, Encryption, Audit, Consent)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Access Control - RBAC enforcement"
+        run: |
+          echo "Checking access control patterns..."
+          VIOLATIONS=0
+
+          # Verify SQL setup includes role-based access controls
+          if [ -f sql/setup.sql ]; then
+            if ! grep -iqE '(CREATE ROLE|GRANT|REVOKE|ROLE)' sql/setup.sql; then
+              echo "::warning::STRUCTURAL: sql/setup.sql does not define roles or grants."
+              echo "Production deployments MUST implement RBAC. Ensure roles are defined for deployment."
+            fi
+          fi
+
+          # Check for hardcoded admin bypasses
+          if grep -rn --include="*.py" -iE '(is_admin\s*=\s*True|role\s*=\s*["\x27]admin["\x27]|bypass[_-]?auth|skip[_-]?auth)' \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            echo ""
+            echo "::error::STRUCTURAL VIOLATION: Hardcoded admin bypass or role assignment detected."
+            echo "Access control MUST use RBAC, not hardcoded role assignments."
+            VIOLATIONS=1
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS"
+
+      - name: "Data Encryption - No unencrypted endpoints or data export"
+        run: |
+          echo "Checking encryption and data export controls..."
+          VIOLATIONS=0
+
+          # Check for HTTP (non-HTTPS) URLs in application code
+          if grep -rn --include="*.py" --include="*.yaml" --include="*.yml" -E \
+            'http://[^l][^o][^c][^a][^l]' \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . \
+            | grep -v 'http://localhost' | grep -v 'http://127.0.0.1' | grep -v '#'; then
+            echo ""
+            echo "::error::STRUCTURAL VIOLATION: Non-HTTPS URL detected. All data in transit MUST use TLS 1.2+."
+            VIOLATIONS=1
+          fi
+
+          # Check for uncontrolled file writes or data dumps
+          EXPORT_PATTERNS='(to_csv|to_excel|to_json|to_parquet|\.write\(|open\(.*["\x27]w["\x27])'
+          if grep -rn --include="*.py" -E "$EXPORT_PATTERNS" \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude \
+            --exclude="scripts/generate_clinical_pdfs.py" . ; then
+            echo ""
+            echo "::warning::STRUCTURAL: Data export/file write detected. Verify exported data is not PHI or is properly encrypted."
+            echo "Bulk data export MUST require administrative approval in production."
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS"
+
+      - name: "Audit Logging - Verify audit trail infrastructure"
+        run: |
+          echo "Checking for audit logging infrastructure..."
+
+          # Check if the application has any logging or audit mechanism
+          HAS_AUDIT=0
+          if grep -rq --include="*.py" -iE '(audit|access.log|logging\.getLogger|log_access|record_access|track_access)' \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            HAS_AUDIT=1
+          fi
+
+          if grep -rq --include="*.sql" -iE '(audit|access.log|CREATE.*LOG)' \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            HAS_AUDIT=1
+          fi
+
+          if [ "$HAS_AUDIT" -eq 0 ]; then
+            echo "::warning::STRUCTURAL: No audit logging infrastructure detected."
+            echo "HIPAA requires logging of all patient data access (who, when, what, action)."
+            echo "Audit logging MUST be implemented before production deployment."
+          else
+            echo "Audit logging infrastructure detected."
+          fi
+
+          # Check that no code deletes or modifies audit logs
+          if grep -rn --include="*.py" --include="*.sql" -iE \
+            '(DELETE.*audit|DROP.*audit|TRUNCATE.*audit|UPDATE.*audit.*log|\.delete.*audit)' \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            echo ""
+            echo "::error::STRUCTURAL VIOLATION: Code that deletes/modifies audit records detected."
+            echo "Audit logs MUST be immutable. No mechanism to alter or delete audit records is permitted."
+            exit 1
+          fi
+
+          echo "PASS"
+
+      - name: "Consent Architecture - Verify consent mechanisms"
+        run: |
+          echo "Checking consent architecture..."
+
+          # Check if consent is referenced in the codebase
+          HAS_CONSENT=0
+          if grep -rq --include="*.py" --include="*.sql" --include="*.yaml" -iE \
+            '(consent|user_consent|patient_consent|data_consent|consent_form|consent_record|opt.in|opt.out)' \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            HAS_CONSENT=1
+          fi
+
+          if [ "$HAS_CONSENT" -eq 0 ]; then
+            echo "::warning::STRUCTURAL: No consent architecture detected in codebase."
+            echo "GDPR/DPDP require explicit, granular, revocable consent before processing health data."
+            echo "Consent mechanisms MUST be designed before production deployment."
+          else
+            echo "Consent references found in codebase."
+          fi
+
+          echo "PASS (consent is advisory in synthetic-data phase)"
+
+  # ──────────────────────────────────────────────────────────────────────
+  # DATA BREACH PREVENTION — Scanning on every push/PR to main
+  # ──────────────────────────────────────────────────────────────────────
+  data-breach-prevention:
+    name: "Data Breach Prevention"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Scan for PHI/PII patterns in all changed files"
+        run: |
+          echo "Scanning for PHI/PII data patterns across the repository..."
+          VIOLATIONS=0
+
+          # Comprehensive PHI pattern scan across all file types
+          PHI_PATTERNS='([0-9]{3}-[0-9]{2}-[0-9]{4}|[0-9]{9}(?=.*ssn)|[A-Z][0-9]{2}\.[0-9]{1,2}(?!.*guideline))'
+
+          # SSN patterns (XXX-XX-XXXX)
+          if grep -rn --include="*.csv" --include="*.json" --include="*.txt" --include="*.py" \
+            --include="*.sql" --include="*.yaml" --include="*.log" -E '[0-9]{3}-[0-9]{2}-[0-9]{4}' \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude --exclude-dir=node_modules . ; then
+            echo "::error::DATA BREACH RISK: SSN pattern (XXX-XX-XXXX) detected in repository files."
+            VIOLATIONS=1
+          fi
+
+          # Email addresses in data files (might indicate real patient data)
+          if grep -rn --include="*.csv" -E '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' data/ 2>/dev/null; then
+            echo "::warning::DATA BREACH RISK: Email addresses found in data/ files. Verify these are synthetic."
+          fi
+
+          # Phone number patterns in data files
+          if grep -rn --include="*.csv" -E '\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}' data/ 2>/dev/null; then
+            echo "::warning::DATA BREACH RISK: Phone number patterns found in data/ files. Verify these are synthetic."
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS: No confirmed PHI/PII breaches detected."
+
+      - name: "Scan for credential leaks in git diff"
+        run: |
+          echo "Scanning changed files for credential leaks..."
+          VIOLATIONS=0
+
+          # Get list of changed files (PR or push)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} HEAD || true)
+          else
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git ls-files)
+          fi
+
+          if [ -n "$CHANGED_FILES" ]; then
+            echo "Scanning $(echo "$CHANGED_FILES" | wc -l | tr -d ' ') changed file(s)..."
+
+            for f in $CHANGED_FILES; do
+              if [ -f "$f" ]; then
+                # Skip binary files and known safe paths
+                case "$f" in
+                  *.png|*.jpg|*.jpeg|*.gif|*.pdf|*.ico|*.woff*|.specify/*|.github/*|.claude/*) continue ;;
+                esac
+
+                # Check each changed file for secrets
+                if grep -nE '(password\s*=\s*["\x27][^"\x27]{4,}|AKIA[0-9A-Z]{16}|sk-[a-zA-Z0-9]{20,}|-----BEGIN.*PRIVATE KEY)' "$f" 2>/dev/null; then
+                  echo "::error::CREDENTIAL LEAK in $f: Possible hardcoded secret detected in changed file."
+                  VIOLATIONS=1
+                fi
+              fi
+            done
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS: No credential leaks in changed files."
+
+      - name: "Dependency vulnerability scan"
+        run: |
+          echo "Checking for known vulnerabilities in Python dependencies..."
+
+          if [ -f requirements.txt ]; then
+            pip install pip-audit --quiet 2>/dev/null || true
+
+            if command -v pip-audit &>/dev/null; then
+              echo "Running pip-audit on requirements.txt..."
+              if ! pip-audit -r requirements.txt --strict 2>&1; then
+                echo ""
+                echo "::error::BREACH PREVENTION: Known vulnerabilities found in dependencies."
+                echo "Critical/High severity vulnerabilities in data-handling packages MUST block merge."
+                exit 1
+              fi
+            else
+              echo "::warning::pip-audit not available. Skipping automated vulnerability scan."
+              echo "Dependencies SHOULD be scanned for vulnerabilities before production deployment."
+            fi
+          fi
+
+          echo "PASS: Dependency scan complete."
+        continue-on-error: true
+
+  # ──────────────────────────────────────────────────────────────────────
+  # DEVELOPMENT WORKFLOW — Agent spec, dependencies, documentation
+  # ──────────────────────────────────────────────────────────────────────
+  development-workflow:
+    name: "Development Workflow"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Agent spec alignment"
+        run: |
+          VIOLATIONS=0
+
+          if [ -f agent_spec.yaml ]; then
+            AGENT_REFS=$(grep -oE 'CARE360_DB\.[A-Z_]+\.[A-Z_]+' agent_spec.yaml || true)
+            if [ -n "$AGENT_REFS" ]; then
+              for ref in $AGENT_REFS; do
+                OBJ_NAME=$(echo "$ref" | awk -F. '{print $NF}')
+                if ! grep -rq --include="*.sql" "$OBJ_NAME" sql/; then
+                  echo "::error::AGENT SPEC DRIFT: $ref in agent_spec.yaml not found in sql/ files."
+                  VIOLATIONS=1
+                fi
+              done
+            fi
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS"
+
+      - name: "Unapproved Python dependencies"
+        run: |
+          if [ -f requirements.txt ]; then
+            APPROVED="^(streamlit|snowflake-snowpark-python|#|$)"
+            UNAPPROVED=$(grep -vE "$APPROVED" requirements.txt | grep -v '^\s*$' || true)
+            if [ -n "$UNAPPROVED" ]; then
+              echo "::warning::Unapproved dependencies (must have justification comment):"
+              echo "$UNAPPROVED"
+            fi
+          fi
+          echo "PASS"
+
+      - name: "SQL magic numbers must have comments"
+        run: |
+          for f in sql/transform.sql sql/patient360.sql; do
+            if [ -f "$f" ]; then
+              BARE=$(grep -nE '(>|<|>=|<=)\s*[0-9]+(\.[0-9]+)?' "$f" | grep -v '\-\-' | grep -v 'ROW_NUMBER' | grep -v 'LIMIT' || true)
+              if [ -n "$BARE" ]; then
+                echo "::warning::Uncommented clinical thresholds in $f:"
+                echo "$BARE"
+              fi
+            fi
+          done
+          echo "PASS"
+
+  # ──────────────────────────────────────────────────────────────────────
+  # SUMMARY — Always runs, reports overall status
+  # ──────────────────────────────────────────────────────────────────────
+  compliance-summary:
+    name: "Compliance Summary"
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [core-principles, regulatory-compliance, structural-compliance, data-breach-prevention, development-workflow]
+    steps:
+      - name: "Report"
+        run: |
+          echo "================================================================"
+          echo "    CARE360 CONSTITUTION COMPLIANCE REPORT v2.0.0"
+          echo "================================================================"
+          echo ""
+          echo "CORE PRINCIPLES:"
+          echo "  I.    Patient Safety & Data Integrity"
+          echo "  II.   Evidence-Cited Responses Only"
+          echo "  III.  Snowflake-Native Architecture"
+          echo "  IV.   Synthetic Data & PHI Boundary"
+          echo "  V.    Layered Data Pipeline"
+          echo ""
+          echo "REGULATORY COMPLIANCE:"
+          echo "  VI.   Data Privacy (HIPAA / GDPR / DPDP)"
+          echo "  VII.  SaMD Classification (FDA / MDR / CDSCO)"
+          echo "  VIII. Quality Standards (IEC 62304 / ISO 13485 / ISO 14971)"
+          echo ""
+          echo "STRUCTURAL COMPLIANCE:"
+          echo "  - Access Control (RBAC & MFA)"
+          echo "  - Data Encryption (at rest & in transit)"
+          echo "  - Audit Logging (immutable patient access logs)"
+          echo "  - Consent Architecture (granular, revocable)"
+          echo ""
+          echo "DATA BREACH PREVENTION:"
+          echo "  - PHI/PII pattern scanning"
+          echo "  - Credential leak detection"
+          echo "  - Dependency vulnerability audit"
+          echo ""
+          echo "Reference: .specify/memory/constitution.md"
+          echo "================================================================"
+
+      - name: "Fail if any required job failed"
+        if: |
+          needs.core-principles.result == 'failure' ||
+          needs.regulatory-compliance.result == 'failure' ||
+          needs.structural-compliance.result == 'failure' ||
+          needs.data-breach-prevention.result == 'failure' ||
+          needs.development-workflow.result == 'failure'
+        run: |
+          echo "::error::One or more constitution compliance checks failed. PR cannot be merged."
+          exit 1
