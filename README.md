@@ -10,6 +10,8 @@ Built entirely on Snowflake: Cortex LLM, Cortex Search, Snowpark, and Streamlit 
 
 ## Table of Contents
 
+- [Business Problem Statement](#business-problem-statement)
+- [Target Users](#target-users)
 - [Architecture Overview](#architecture-overview)
 - [Tech Stack](#tech-stack)
 - [Repository Structure](#repository-structure)
@@ -23,6 +25,65 @@ Built entirely on Snowflake: Cortex LLM, Cortex Search, Snowpark, and Streamlit 
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Testing & Validation](#testing--validation)
 - [Team Onboarding](#team-onboarding)
+
+---
+
+## Business Problem Statement
+
+This hackathon brief is the authoritative problem statement for the application.
+The repository, architecture, agent behavior, and future implementation work
+must remain aligned to it.
+
+Healthcare organizations struggle with fragmented patient data spread across
+EHRs, claims systems, lab platforms, and clinical documents. Clinicians, care
+coordinators, and compliance teams spend significant time manually piecing
+together patient histories from these disconnected sources.
+
+### Core challenges
+
+- **Data silos**: Structured records (labs, medications, claims) live in
+  separate systems from unstructured clinical notes (discharge summaries,
+  progress notes, radiology reports).
+- **Time-to-insight**: Clinicians spend 15-30 minutes per patient assembling a
+  longitudinal view before making care decisions.
+- **Evidence gaps**: Regulatory and quality teams cannot quickly trace clinical
+  decisions back to supporting documentation.
+- **Safety risk**: Incomplete views lead to missed drug interactions, duplicate
+  tests, and gaps in care continuity.
+
+### What this system does
+
+- Provides a Snowflake-native copilot that unifies structured healthcare
+  records with clinical documents.
+- Enables natural-language questions answered with cited evidence from the
+  patient record.
+- Uses synthetic data only.
+- Explicitly refuses to make unsupported medical predictions.
+
+### What this system does NOT do
+
+- Diagnose conditions or recommend treatments.
+- Make predictions about patient outcomes without explicit evidence.
+- Replace clinical judgment.
+- Process real PHI in this MVP.
+
+---
+
+## Target Users
+
+| Persona | Role | Primary Use Cases |
+|---------|------|-------------------|
+| Clinical Care Coordinator | Manages care plans across providers | "What medications is this patient on and when were they last adjusted?" / "Summarize this patient's last 3 visits" |
+| Quality & Compliance Analyst | Audits clinical documentation for regulatory adherence | "Show evidence of HbA1c monitoring for diabetic patients" / "Which patients are missing follow-up labs?" |
+| Population Health Manager | Identifies at-risk cohorts and care gaps | "How many diabetic patients have uncontrolled A1c?" / "List patients with >2 ED visits in 90 days" |
+| Clinical Pharmacist | Reviews medication safety and interactions | "What labs were ordered before starting this medication?" / "Show all active prescriptions and their indications" |
+
+### Common requirements across all personas
+
+- Answers must cite the source record (table, document, date).
+- No hallucinated or inferred medical conclusions.
+- Sub-10-second response time for interactive use.
+- Role-based access is a future requirement, with row-level security by care team.
 
 ---
 

@@ -44,6 +44,45 @@ jobs:
           [ "$VIOLATIONS" -eq 0 ] || exit 1
           echo "PASS"
 
+      - name: "Scope Canon - No hackathon scope drift"
+        run: |
+          echo "Checking that the codebase stays within the hackathon business problem statement..."
+          VIOLATIONS=0
+
+          SCOPE_DRIFT_PATTERNS='(treatment recommendation engine|autonomous diagnosis|clinical decision engine|predictive triage|prescribe treatment|replace clinical judgment|real patient deployment|production PHI ingestion|process real PHI)'
+          if grep -rn --include="*.py" --include="*.sql" --include="*.yaml" --include="*.yml" --include="*.md" -iE "$SCOPE_DRIFT_PATTERNS" \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            echo ""
+            echo "::error::SCOPE VIOLATION: Found language or behavior that drifts beyond the hackathon business problem statement."
+            echo "The product MUST remain a Snowflake-native evidence copilot using synthetic data only."
+            VIOLATIONS=1
+          fi
+
+          if [ -f README.md ]; then
+            if ! grep -q "## Business Problem Statement" README.md; then
+              echo "::error::SCOPE VIOLATION: README.md is missing the Business Problem Statement section."
+              VIOLATIONS=1
+            fi
+            if ! grep -q "## Target Users" README.md; then
+              echo "::error::SCOPE VIOLATION: README.md is missing the Target Users section."
+              VIOLATIONS=1
+            fi
+          fi
+
+          if [ -f .specify/memory/constitution.md ]; then
+            if ! grep -q "## Product Scope Canon" .specify/memory/constitution.md; then
+              echo "::error::SCOPE VIOLATION: Constitution is missing the Product Scope Canon section."
+              VIOLATIONS=1
+            fi
+            if ! grep -q "## Target Users & Required Outcomes" .specify/memory/constitution.md; then
+              echo "::error::SCOPE VIOLATION: Constitution is missing the Target Users & Required Outcomes section."
+              VIOLATIONS=1
+            fi
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS"
+
       - name: "II. Evidence-Cited Responses - Citation enforcement"
         run: |
           VIOLATIONS=0
@@ -60,6 +99,23 @@ jobs:
               echo "::error::PRINCIPLE II VIOLATION: agent_spec.yaml lacks citation requirements."
               VIOLATIONS=1
             fi
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS"
+
+      - name: "Business Scope - No unsupported prediction or treatment promises"
+        run: |
+          echo "Checking that application text does not promise unsupported clinical outcomes..."
+          VIOLATIONS=0
+
+          UNSUPPORTED_PATTERNS='(predict patient outcomes|predict outcomes|recommend treatments|recommend a treatment|replace clinical judgment|clinical diagnosis platform|autonomous clinical recommendation|treatment plan generator)'
+          if grep -rn --include="*.py" --include="*.yaml" --include="*.yml" --include="*.md" -iE "$UNSUPPORTED_PATTERNS" \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            echo ""
+            echo "::error::BUSINESS SCOPE VIOLATION: Found unsupported prediction/treatment or clinician-replacement language."
+            echo "The app MUST refuse unsupported predictions and MUST NOT recommend treatment."
+            VIOLATIONS=1
           fi
 
           [ "$VIOLATIONS" -eq 0 ] || exit 1
@@ -104,6 +160,23 @@ jobs:
             '[0-9]{3}-[0-9]{2}-[0-9]{4}' \
             --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
             echo "::error::PRINCIPLE IV VIOLATION: Possible SSN pattern detected."
+            VIOLATIONS=1
+          fi
+
+          [ "$VIOLATIONS" -eq 0 ] || exit 1
+          echo "PASS"
+
+      - name: "IV. Synthetic Data - No real-PHI enablement language"
+        run: |
+          echo "Checking that the MVP remains synthetic-data only..."
+          VIOLATIONS=0
+
+          REAL_PHI_PATTERNS='(real PHI|production PHI|live patient data|connect to EHR production|customer patient data|actual patient records)'
+          if grep -rn --include="*.py" --include="*.sql" --include="*.yaml" --include="*.yml" --include="*.md" -iE "$REAL_PHI_PATTERNS" \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            echo ""
+            echo "::error::PRINCIPLE IV VIOLATION: Found language enabling real PHI or live patient data in this MVP."
+            echo "This repository is synthetic-data only unless the constitution is amended first."
             VIOLATIONS=1
           fi
 
@@ -553,7 +626,7 @@ jobs:
       - name: "Report"
         run: |
           echo "================================================================"
-          echo "    CARE360 CONSTITUTION COMPLIANCE REPORT v2.0.0"
+          echo "    CARE360 CONSTITUTION COMPLIANCE REPORT v2.1.0"
           echo "================================================================"
           echo ""
           echo "CORE PRINCIPLES:"
@@ -562,6 +635,7 @@ jobs:
           echo "  III.  Snowflake-Native Architecture"
           echo "  IV.   Synthetic Data & PHI Boundary"
           echo "  V.    Layered Data Pipeline"
+          echo "  Scope. Hackathon Business Problem Statement & Target Users"
           echo ""
           echo "REGULATORY COMPLIANCE:"
           echo "  VI.   Data Privacy (HIPAA / GDPR / DPDP)"

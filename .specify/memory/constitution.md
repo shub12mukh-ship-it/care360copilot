@@ -1,20 +1,83 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 → 2.0.0
+- Version change: 2.0.0 → 2.1.0
 - Modified principles: none renamed
 - Added sections:
-  - Principle VI: Data Privacy & Regulatory Compliance (HIPAA, GDPR, DPDP)
-  - Principle VII: Software as a Medical Device (SaMD) Classification
-  - Principle VIII: Engineering Lifecycle & Quality Standards (IEC 62304, ISO 13485, ISO 14971)
-  - Section: Structural Compliance Requirements (RBAC, encryption, audit logs, consent)
-  - Section: Data Breach Prevention & Monitoring
+  - Product Scope Canon
+  - Target Users & Required Outcomes
 - Removed sections: none
-- Bump rationale: MAJOR — new regulatory principles fundamentally expand the
-  governance scope and impose non-negotiable legal obligations
+- Bump rationale: MINOR — adds binding business scope and persona requirements
+  from the hackathon brief without changing existing regulatory principles
 - Follow-up TODOs: none
 -->
 
 # Care360 Evidence Copilot Constitution
+
+## Product Scope Canon
+
+The hackathon business problem statement is the authoritative product scope for
+this repository. All specifications, plans, implementation tasks, pull requests,
+and feature discussions MUST remain aligned with the following problem statement
+and MUST NOT deviate from it unless this constitution is amended first.
+
+Healthcare organizations struggle with fragmented patient data spread across
+EHRs, claims systems, lab platforms, and clinical documents. Clinicians, care
+coordinators, and compliance teams spend significant time manually piecing
+together patient histories from these disconnected sources.
+
+Core challenges:
+- Data silos: Structured records (labs, medications, claims) live in separate
+  systems from unstructured clinical notes (discharge summaries, progress
+  notes, radiology reports).
+- Time-to-insight: Clinicians spend 15-30 minutes per patient assembling a
+  longitudinal view before making care decisions.
+- Evidence gaps: Regulatory and quality teams cannot quickly trace clinical
+  decisions back to supporting documentation.
+- Safety risk: Incomplete views lead to missed drug interactions, duplicate
+  tests, and gaps in care continuity.
+
+What this system does:
+- A Snowflake-native copilot that unifies structured healthcare records with
+  clinical documents.
+- Enables natural-language questions answered with cited evidence from the
+  patient record.
+- Uses synthetic data only.
+- Explicitly refuses to make unsupported medical predictions.
+
+What this system does NOT do:
+- Diagnose conditions or recommend treatments.
+- Make predictions about patient outcomes without explicit evidence.
+- Replace clinical judgment.
+- Process real PHI in this MVP.
+
+Rationale: This section is the project bible. It defines the business boundary
+for every future change and prevents scope drift that would undermine the demo,
+the architecture, or the safety posture.
+
+## Target Users & Required Outcomes
+
+The application MUST continue to serve the following personas and their primary
+use cases. Changes that remove support for these users, or shift the product to
+an unrelated workflow, are out of constitution unless explicitly amended here.
+
+| Persona | Role | Primary Use Cases |
+|---------|------|-------------------|
+| Clinical Care Coordinator | Manages care plans across providers | "What medications is this patient on and when were they last adjusted?" / "Summarize this patient's last 3 visits" |
+| Quality & Compliance Analyst | Audits clinical documentation for regulatory adherence | "Show evidence of HbA1c monitoring for diabetic patients" / "Which patients are missing follow-up labs?" |
+| Population Health Manager | Identifies at-risk cohorts and care gaps | "How many diabetic patients have uncontrolled A1c?" / "List patients with >2 ED visits in 90 days" |
+| Clinical Pharmacist | Reviews medication safety and interactions | "What labs were ordered before starting this medication?" / "Show all active prescriptions and their indications" |
+
+Common requirements across all personas are mandatory:
+- Answers MUST cite the source record (table, document, date).
+- The system MUST NOT hallucinate or infer unsupported medical conclusions.
+- Interactive responses SHOULD remain under 10 seconds for the intended demo
+  and operational workflow.
+- The architecture MUST remain compatible with future role-based access and
+  row-level security by care team.
+
+Rationale: Personas anchor the product to real healthcare workflows and ensure
+the system remains useful to care coordination, quality, population health, and
+medication safety review.
 
 ## Core Principles
 
@@ -302,4 +365,4 @@ Regulatory compliance (Principles VI-VIII) MUST be re-assessed whenever:
 - A data breach or near-miss incident occurs.
 - Applicable regulations are updated or new regulations take effect.
 
-**Version**: 2.0.0 | **Ratified**: 2026-09-24 | **Last Amended**: 2026-09-24
+**Version**: 2.1.0 | **Ratified**: 2026-09-24 | **Last Amended**: 2026-09-25
