@@ -185,6 +185,24 @@ synthetic-healthcare-data/
 - `pdf_filename`: Reference to PDF document
 - `summary`: Brief description
 
+## 🧭 Patient360 Curation Direction
+
+This repository now treats `PATIENT360` as the canonical database target for all
+forward-looking curation, semantic-view, and application work.
+
+- Raw synthetic healthcare assets under `synthetic-healthcare-data/` are the source layer.
+- Curation logic is defined in `sql/patient360_curation.sql`.
+- Semantic-view candidate summaries are defined in `sql/patient360_semantic_prep.sql`.
+- Validation scenarios for curated entities, persona workflows, and evidence assets are
+  documented in `docs/testing.md`.
+- Legacy `CARE360_DB` references are migration debt and must not be copied into new work.
+
+The intended application flow is:
+1. load or expose raw synthetic assets in `PATIENT360.RAW`
+2. build patient-centered curated entities in `PATIENT360.CURATED`
+3. expose semantic-view candidate summaries in `PATIENT360.ANALYTICS`
+4. use those business-facing entities for a future Streamlit and semantic-view experience
+
 ## 🚀 Usage
 
 ### Prerequisites

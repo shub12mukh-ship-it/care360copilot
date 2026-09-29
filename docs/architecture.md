@@ -153,7 +153,7 @@ PATIENT (1)
 ### 5.1 Infrastructure Layout
 
 ```
-CARE360_DB
+PATIENT360
 |
 +-- RAW schema
 |   |-- PATIENTS           (staged from CSV)
@@ -162,16 +162,24 @@ CARE360_DB
 |   |-- MEDICATIONS        (staged from CSV)
 |   |-- CLAIMS             (staged from CSV)
 |   |-- CLINICAL_NOTES     (generated synthetic documents)
-|   +-- STAGE: @care360_stage  (file landing zone)
+|   +-- STAGE: @patient360_stage  (file landing zone)
+|
++-- DOCUMENTS schema
+|   |-- DOCUMENT_ASSET_INVENTORY             (canonical staged asset inventory)
+|   |-- DOCUMENT_ASSET_MATCH_CONTEXT         (patient/report linkage outcomes)
+|   |-- DOCUMENT_EXTRACTED_TEXT              (text extraction and OCR status)
+|   |-- DOCUMENT_SEARCH_CHUNKS               (search-ready chunk outputs)
+|   +-- DOCUMENT_INGESTION_QUALITY_FINDINGS  (missing files, broken refs, duplicates, unmatched assets)
+|
++-- CURATED schema
+|   |-- CURATED_PATIENT_RECORD
+|   |-- CURATED_ENCOUNTER_SUMMARY
+|   |-- CURATED_EVIDENCE_ASSET
+|   +-- CURATED_PATIENT_TIMELINE_EVENT
 |
 +-- ANALYTICS schema
-|   |-- PATIENT_360_VIEW   (unified patient view - Dynamic Table or View)
-|   |-- PATIENT_TIMELINE   (longitudinal event timeline)
-|   +-- CARE_GAPS          (missing follow-ups, overdue labs)
-|
-+-- SEARCH schema
-|   |-- CLINICAL_DOCS_CHUNKED  (chunked documents for Cortex Search)
-|   +-- CORTEX_SEARCH_SERVICE: clinical_search_svc
+|   |-- SEM_PATIENT_OVERVIEW
+|   +-- SEM_ENCOUNTER_OVERVIEW
 |
 +-- APP schema
     +-- Streamlit app (streamlit_app.py)
@@ -181,7 +189,7 @@ CARE360_DB
 
 | Service | Purpose | How Used |
 |---------|---------|----------|
-| **Cortex Search** | Semantic search over clinical documents | Index chunked clinical notes; retrieve relevant passages for RAG |
+| **Cortex Search** | Semantic search over clinical documents | Index `PATIENT360.DOCUMENTS.DOCUMENT_SEARCH_CHUNKS`; retrieve relevant passages for RAG |
 | **Cortex LLM (AI_COMPLETE)** | Answer generation with citations | Generate natural-language answers from retrieved evidence |
 | **Cortex AI_EXTRACT** | (Optional) Parse structured fields from clinical notes | Extract diagnoses, medications mentioned in free-text |
 | **Snowflake Stages** | Data landing zone | Load CSV/JSON synthetic data |
@@ -191,12 +199,14 @@ CARE360_DB
 ### 5.3 Data Flow
 
 ```
-1. LOAD:     CSV files --> @care360_stage --> RAW tables (COPY INTO)
-2. ENRICH:   RAW tables --> ANALYTICS views (joins, aggregations)
-3. CHUNK:    CLINICAL_NOTES --> CLINICAL_DOCS_CHUNKED (text splitting)
-4. INDEX:    CLINICAL_DOCS_CHUNKED --> Cortex Search Service
-5. QUERY:    User question --> Cortex Search + SQL --> Evidence context
-6. ANSWER:   Evidence context --> Cortex LLM --> Cited answer
+1. LOAD:     CSV files --> RAW tables and staged PDFs/images in `PATIENT360.RAW`
+2. INGEST:   RAW metadata + RAW stages --> DOCUMENTS canonical asset inventory and match context
+3. EXTRACT:  DOCUMENTS asset inventory --> DOCUMENTS extracted text / OCR classification
+4. CHUNK:    DOCUMENTS extracted text --> DOCUMENTS search chunks
+5. INDEX:    DOCUMENTS search chunks --> Cortex Search Service
+6. ENRICH:   RAW tables + DOCUMENTS standardized ingestion outputs --> CURATED business entities --> ANALYTICS summaries
+7. QUERY:    User question --> Cortex Search + SQL --> Evidence context
+8. ANSWER:   Evidence context --> Cortex LLM --> Cited answer
 ```
 
 ### 5.4 Safety & Guardrails

@@ -1,17 +1,40 @@
 <!--
 Sync Impact Report
-- Version change: 2.0.0 → 2.1.0
+- Version change: 2.1.0 → 2.2.0
 - Modified principles: none renamed
 - Added sections:
-  - Product Scope Canon
-  - Target Users & Required Outcomes
+  - Canonical Platform Naming
 - Removed sections: none
-- Bump rationale: MINOR — adds binding business scope and persona requirements
-  from the hackathon brief without changing existing regulatory principles
+- Bump rationale: MINOR — adds a binding governance rule that PATIENT360 is the
+  canonical database name and prohibits future CARE360_DB references without an
+  explicit constitutional amendment
 - Follow-up TODOs: none
 -->
 
 # Care360 Evidence Copilot Constitution
+
+## Canonical Platform Naming
+
+`PATIENT360` is the canonical and protected database identity for this project.
+It is part of the project bible and MUST be treated as non-negotiable naming
+governance unless this constitution is amended.
+
+The following rules are mandatory:
+- All future architecture, specifications, plans, SQL, semantic-layer work,
+  Streamlit app work, documentation, and governance artifacts MUST use
+  `PATIENT360` as the active database name.
+- `CARE360_DB` is deprecated and MUST NOT be introduced in any new file,
+  feature, migration, plan, implementation, review guidance, or operational
+  instruction.
+- Existing references to `CARE360_DB` are considered legacy material and MUST
+  be treated as migration debt to be replaced, not copied forward.
+- No contributor may rename `PATIENT360`, create a parallel canonical database
+  identity, or revive `CARE360_DB` as an active target without an explicit
+  constitutional amendment and documented rationale.
+
+Rationale: Stable naming is part of architecture integrity. Allowing multiple
+canonical database identities causes drift in specifications, semantic views,
+SQL objects, Streamlit integration, and review governance.
 
 ## Product Scope Canon
 
@@ -39,6 +62,7 @@ Core challenges:
 What this system does:
 - A Snowflake-native copilot that unifies structured healthcare records with
   clinical documents.
+- Uses `PATIENT360` as the canonical database and product data foundation.
 - Enables natural-language questions answered with cited evidence from the
   patient record.
 - Uses synthetic data only.
@@ -111,7 +135,8 @@ platform (Cortex LLM, Cortex Search, Snowpark, Streamlit in Snowflake). No
 external API calls, no third-party LLM providers, no data egress. The
 warehouse (CARE360_WH) MUST remain XSMALL with auto-suspend to control cost.
 New features MUST use Snowflake-native capabilities before considering
-external dependencies.
+external dependencies. `PATIENT360` MUST be used as the active database target
+for this project, and `CARE360_DB` MUST NOT be used in any new work.
 
 Rationale: Single-platform architecture simplifies security, governance, and
 cost control. Data never leaves the Snowflake trust boundary.
@@ -139,7 +164,9 @@ Data MUST flow through four schemas with clear responsibilities:
 
 Views MUST be used over materialized tables in CURATED and ANALYTICS unless
 a documented performance justification exists. Schema boundaries MUST NOT be
-bypassed (e.g., ANALYTICS views MUST NOT read from RAW directly).
+bypassed (e.g., ANALYTICS views MUST NOT read from RAW directly). The layered
+pipeline MUST be defined under the `PATIENT360` database identity for all
+forward-looking work.
 
 Rationale: The layered approach ensures traceability from source to
 presentation, simplifies debugging, and keeps transformation logic in SQL
@@ -335,6 +362,10 @@ to prevent accidental data exposure:
 - **Agent spec alignment**: The `agent_spec.yaml` MUST reference object names
   that match the actual Snowflake objects created by the SQL scripts. Drift
   between the agent spec and the database MUST be caught before deployment.
+- **Canonical naming enforcement**: New or modified project artifacts MUST NOT
+  introduce `CARE360_DB` references. Reviews MUST treat new `CARE360_DB`
+  references as governance violations unless they appear in an explicitly marked
+  legacy migration context.
 - **Validation queries**: New SQL objects (views, tables, search services) MUST
   include corresponding validation queries in `docs/testing.md` or inline
   comments demonstrating expected output.
@@ -365,4 +396,4 @@ Regulatory compliance (Principles VI-VIII) MUST be re-assessed whenever:
 - A data breach or near-miss incident occurs.
 - Applicable regulations are updated or new regulations take effect.
 
-**Version**: 2.1.0 | **Ratified**: 2026-09-24 | **Last Amended**: 2026-09-25
+**Version**: 2.2.0 | **Ratified**: 2026-09-24 | **Last Amended**: 2026-09-27
