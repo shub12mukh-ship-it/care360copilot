@@ -165,21 +165,35 @@ PATIENT360
 |   +-- STAGE: @patient360_stage  (file landing zone)
 |
 +-- DOCUMENTS schema
-|   |-- DOCUMENT_ASSET_INVENTORY             (canonical staged asset inventory)
-|   |-- DOCUMENT_ASSET_MATCH_CONTEXT         (patient/report linkage outcomes)
-|   |-- DOCUMENT_EXTRACTED_TEXT              (text extraction and OCR status)
-|   |-- DOCUMENT_SEARCH_CHUNKS               (search-ready chunk outputs)
-|   +-- DOCUMENT_INGESTION_QUALITY_FINDINGS  (missing files, broken refs, duplicates, unmatched assets)
+|   |-- STAGE_FILE_REGISTRY                    (DIRECTORY-backed file existence source of truth)
+|   |-- DOCUMENT_ASSET_INVENTORY               (canonical staged asset inventory, table)
+|   |-- DOCUMENT_ASSET_MATCH_CONTEXT           (patient/report linkage outcomes)
+|   |-- DOCUMENT_EXTRACTED_TEXT_TABLE          (materialized AI_PARSE_DOCUMENT output)
+|   |-- DOCUMENT_SEARCH_CHUNKS_TABLE           (deterministic 800/100 chunks)
+|   |-- DOCUMENT_INGESTION_QUALITY_FINDINGS_TABLE (missing files, broken refs, duplicates, unmatched)
+|   +-- CORTEX_SEARCH_SERVICE: DOCUMENT_SEARCH_SERVICE
 |
 +-- CURATED schema
 |   |-- CURATED_PATIENT_RECORD
 |   |-- CURATED_ENCOUNTER_SUMMARY
+|   |-- CURATED_MEDICATION_EVIDENCE_SUMMARY
+|   |-- CURATED_LAB_MONITORING_SUMMARY
+|   |-- CURATED_CARE_GAP_SIGNAL
 |   |-- CURATED_EVIDENCE_ASSET
+|   |-- CURATED_DOCUMENT_EVIDENCE             (ingestion-backed document evidence)
+|   |-- CURATED_CLAIM_CLINICAL_CONTEXT       (claims WITHOUT financials or policy ids)
 |   +-- CURATED_PATIENT_TIMELINE_EVENT
 |
 +-- ANALYTICS schema
 |   |-- SEM_PATIENT_OVERVIEW
-|   +-- SEM_ENCOUNTER_OVERVIEW
+|   |-- SEM_ENCOUNTER_OVERVIEW
+|   |-- ANALYTICS_INGESTION_QUALITY_SUMMARY
+|   |-- ANALYTICS_PATIENT_EVIDENCE_READINESS
+|   |-- ANALYTICS_SEARCH_CORPUS_OVERVIEW
+|   |-- ANALYTICS_CARE_GAP_WITH_EVIDENCE
+|   |-- PROCEDURE: ANSWER_WITH_EVIDENCE        (Cortex Search + Cortex LLM, cited)
+|   |-- SEMANTIC VIEW: PATIENT360_EVIDENCE_SEMANTIC
+|   +-- AGENT: PATIENT360_EVIDENCE_COPILOT    (Analyst + Search orchestration)
 |
 +-- APP schema
     +-- Streamlit app (streamlit_app.py)
@@ -209,6 +223,22 @@ PATIENT360
 8. ANSWER:   Evidence context --> Cortex LLM --> Cited answer
 ```
 
+### 5.3.1 Ingestion Implementation Constraints
+
+Two platform constraints shaped the ingestion design and must be preserved:
+
+- **`AI_PARSE_DOCUMENT` cannot sit inside a view that feeds Cortex Search.** Cortex
+  Search requires change tracking, which is unsupported over non-deterministic
+  functions. Parsing is therefore materialized into
+  `DOCUMENT_EXTRACTED_TEXT_TABLE`, and chunking/search read only from tables.
+- **`AI_PARSE_DOCUMENT` raises a hard error on a missing staged file** rather than
+  returning NULL, so a single absent file fails the whole statement. File presence
+  is confirmed first via `STAGE_FILE_REGISTRY` (built from `DIRECTORY()`), and
+  parsing runs in per-family batches gated on `stage_file_present = TRUE`.
+
+Assets that cannot be parsed are never dropped: they stay in the inventory with an
+explicit `processing_status` and surface in `DOCUMENT_INGESTION_QUALITY_FINDINGS`.
+
 ### 5.4 Safety & Guardrails
 
 - **System prompt enforcement**: LLM instructed to cite sources, refuse speculation, flag uncertainty
@@ -216,6 +246,51 @@ PATIENT360
 - **Citation requirement**: Every factual claim in a response must reference a source record
 - **Disclaimer banner**: UI displays "Synthetic data only - not for clinical use"
 - **No prediction endpoint**: System answers questions about existing records only
+
+### 5.5 Claims Access Tiering (minimum-necessary)
+
+`RAW.INSURANCE_CLAIMS` carries 17 columns that split into three tiers. Only the
+clinical tier reaches the semantic view, via `CURATED_CLAIM_CLINICAL_CONTEXT`.
+
+| Tier | Columns | Exposed to care team? | Rationale |
+|------|---------|----------------------|-----------|
+| Clinical | `DIAGNOSIS_CODE` (ICD-10), `PROCEDURE_CODE` (CPT), `PROCEDURE_DESCRIPTION`, `CLAIM_STATUS`, `DENIAL_REASON`, `CLAIM_DATE` | Yes | A denial is care friction: it predicts medication abandonment and missed follow-up, so it is clinically actionable |
+| Financial | `BILLED_AMOUNT`, `ALLOWED_AMOUNT`, `INSURANCE_PAID`, `PATIENT_RESPONSIBILITY` | No | The billed-vs-paid spread never changes a care decision |
+| Administrative | `POLICY_NUMBER`, `INSURANCE_PROVIDER` | No | Payer identifiers with no clinical value |
+
+The agent is instructed to state that this exclusion is **deliberate** when asked
+for amounts, rather than reporting a data gap.
+
+**Known limitation — this is a modelling boundary, not an enforced one.** Any role
+with `SELECT` on `PATIENT360.RAW` can still read the excluded columns directly.
+The account has a single working role (`CARE360_RW_ROLE`), so clinician, analyst,
+and pipeline operator are currently the same principal. `ROW ACCESS POLICY` is
+unsupported on this account edition, but `VISITS.DOCTOR_ID` links 43 doctors to 23
+patients (avg 4.4 each), so care-team scoping is achievable with a **secure view**
+filtering on a `CURRENT_USER()` to `DOCTOR_ID` mapping table. RBAC and row-level
+security remain out of MVP scope by design (see section 6).
+
+### 5.6 Persona Coverage
+
+The four target users in section 2 are served by two tools on one agent:
+`Patient360Analyst` (semantic view to SQL) and `EvidenceSearch` (Cortex Search).
+
+| Persona | Primary path | Status |
+|---------|--------------|--------|
+| Clinical Care Coordinator | Analyst: `medication_name`, `dosage`, `frequency`, `medication_status`, `prescription_date` | Structured + documents |
+| Quality & Compliance Analyst | Analyst: `test_type`, `critical_flag`, monitoring recency; then Search to cite the report | Structured + documents |
+| Population Health Manager | Analyst: `test_type` + `critical_flag` cohorts, care gap counts | **Partial** — see limitation below |
+| Clinical Pharmacist | Analyst: `latest_prior_lab_test_type` / `latest_prior_lab_test_date`, precomputed per prescription | Structured + documents |
+
+**Population Health limitation.** `RAW.LAB_RESULTS` has no result-value column —
+only `TEST_TYPE`, `TEST_CODE`, `STATUS`, and `CRITICAL_FLAG`. Numeric lab values
+exist **only inside the parsed lab PDF text**. So "patients with a critical A1C
+result" is answerable from structured data, but threshold questions such as
+"uncontrolled A1c above 9%" are not; they must go through `EvidenceSearch` and be
+quoted from the document. The agent's orchestration instructions encode this route.
+
+Also note only **23 of 100 patients** have any visit or claim history, so
+claims-based and encounter-based demos are limited to that subset.
 
 ---
 
