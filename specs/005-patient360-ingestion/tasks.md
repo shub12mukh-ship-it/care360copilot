@@ -49,15 +49,40 @@
 - [X] T017 [US3] Create the ingestion-quality-finding output in `sql/patient360_ingestion.sql` with quality finding identifier, ingestion asset identifier or issue grouping key, issue category, severity or review priority, issue description, remediation hint, first-detected timestamp, and status for review lifecycle
 - [X] T018 [US3] Implement broken-reference and missing-file detection in `sql/patient360_ingestion.sql` so quality findings clearly identify inaccessible or absent stage paths
 - [X] T019 [P] [US3] Implement duplicate-asset and unmatched-asset detection in `sql/patient360_ingestion.sql` so repeated logical assets can be grouped while ambiguous patient/report matches remain unresolved and reviewable
-- [ ] T020 [US3] Implement unparseable-asset detection in `sql/patient360_ingestion.sql` so failed parsing or OCR outcomes remain visible in canonical inventory and produce explicit remediation-oriented quality findings
+- [X] T020 [US3] Implement unparseable-asset detection in `sql/patient360_ingestion.sql` so failed parsing or OCR outcomes remain visible in canonical inventory and produce explicit remediation-oriented quality findings
 - [X] T021 [US3] Add quality-validation queries in `docs/testing.md` covering all five mandatory defect categories and confirming curation can review open findings rather than assuming silent completeness
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
 - [X] T022 [P] Update `docs/architecture.md` to document the ingestion-first `PATIENT360.DOCUMENTS` flow, existing RAW stages as the source of truth, and the separation of canonical inventory, extracted text, search chunks, and quality findings
 - [X] T023 [P] Update `docs/testing.md` to include the end-to-end quickstart validation scenarios for reconciliation, extraction, OCR classification, chunk provenance, and quality findings
-- [ ] T024 Reconcile any downstream references in `sql/patient360_curation.sql`, `sql/patient360_semantic_prep.sql`, `docs/architecture.md`, or `README.md` that still imply direct stage-specific metadata consumption instead of planned standardized ingestion outputs
-- [ ] T025 Run and record the end-to-end validation scenarios from `specs/005-patient360-ingestion/quickstart.md` in `docs/testing.md` or `sql/patient360_ingestion.sql` comments so the ingestion feature has a documented review path
+- [X] T024 Reconcile any downstream references in `sql/patient360_curation.sql`, `sql/patient360_semantic_prep.sql`, `docs/architecture.md`, or `README.md` that still imply direct stage-specific metadata consumption instead of planned standardized ingestion outputs
+- [X] T025 Run and record the end-to-end validation scenarios from `specs/005-patient360-ingestion/quickstart.md` in `docs/testing.md` or `sql/patient360_ingestion.sql` comments so the ingestion feature has a documented review path
+
+## Phase 7: Analysis Layer (added during execution)
+
+**Goal**: Turn the completed ingestion corpus into an analysis-ready, evidence-cited surface.
+
+- [X] T026 Create `PATIENT360.CURATED.CURATED_DOCUMENT_EVIDENCE` in `sql/patient360_analysis.sql` so curation consumes standardized ingestion outputs instead of stage-specific metadata
+- [X] T027 Create ingestion/coverage analytics views (`ANALYTICS_INGESTION_QUALITY_SUMMARY`, `ANALYTICS_SEARCH_CORPUS_OVERVIEW`) in `sql/patient360_analysis.sql`
+- [X] T028 Create `ANALYTICS_PATIENT_EVIDENCE_READINESS` and `ANALYTICS_CARE_GAP_WITH_EVIDENCE` in `sql/patient360_analysis.sql` so persona questions can be answered with citation capability attached
+- [X] T029 Create the evidence-cited RAG procedure `PATIENT360.ANALYTICS.ANSWER_WITH_EVIDENCE` in `sql/patient360_analysis.sql` enforcing citations and refusal of diagnosis/prognosis
+- [X] T030 Create the Cortex Analyst semantic view `PATIENT360.ANALYTICS.PATIENT360_EVIDENCE_SEMANTIC` in `sql/patient360_analysis.sql`
+- [X] T031 Add validation sections 13-18 to `docs/testing.md` covering stage presence, coverage rollup, search service, RAG answering, semantic view, and analysis layer
+
+## Phase 8: Persona Coverage & Claims Access Tiering (added during execution)
+
+**Goal**: Close the gap between the four constitution personas and what the semantic model could actually answer, and define a defensible claims access boundary for care-team users.
+
+**Context**: The semantic view was evidence-readiness-centric (counts only) rather than clinical-content-centric, so three of the four personas could only be served from document search. The curated layer already carried drug names, dosages, and lab test types; they were simply never promoted into the semantic model.
+
+- [X] T032 Create `PATIENT360.CURATED.CURATED_CLAIM_CLINICAL_CONTEXT` in `sql/patient360_analysis.sql` exposing only the clinical claim tier (ICD-10 diagnosis, CPT procedure, status, denial reason) and deliberately excluding financial amounts and policy identifiers under HIPAA minimum-necessary
+- [X] T033 Extend `PATIENT360.ANALYTICS.PATIENT360_EVIDENCE_SEMANTIC` in `sql/patient360_analysis.sql` with `medications`, `labs`, and `claims` entities so Clinical Care Coordinator, Quality & Compliance Analyst, and Clinical Pharmacist questions resolve from structured data instead of document search alone
+- [X] T034 Update the Cortex Agent specification in `sql/patient360_analysis.sql` with explicit routing rules and two scope limits the agent must explain rather than silently fail on: deliberately excluded claim financials, and numeric lab values existing only in document text
+- [X] T035 [P] Document claims access tiering and persona coverage as `docs/architecture.md` sections 5.5 and 5.6, including the limitation that the claims boundary is a modelling boundary and not an enforced one
+- [X] T036 [P] Add validation sections 19-21 to `docs/testing.md` covering claims tiering, per-persona semantic view queries, and agent scope-limit behaviour
+
+**Known limitation recorded, not resolved**: `RAW.LAB_RESULTS` has no result-value column, so Population Health Manager threshold questions (for example "uncontrolled A1c above 9%") cannot be answered from structured data and must route through Cortex Search.
 
 ## Dependencies & Execution Order
 
