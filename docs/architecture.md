@@ -292,6 +292,55 @@ quoted from the document. The agent's orchestration instructions encode this rou
 Also note only **23 of 100 patients** have any visit or claim history, so
 claims-based and encounter-based demos are limited to that subset.
 
+### 5.7 Persona Access Layer
+
+Built by `sql/patient360_personas.sql` and consumed by `app/streamlit_app.py`.
+
+Each persona is bound to its own set of `SECURE` views in `ANALYTICS` and its own
+semantic view. Restriction is achieved by **column absence**, not by hiding fields
+in the UI: a column a persona may not see is not projected by that persona's view,
+so it cannot appear in a Cortex Analyst result, a Streamlit dataframe, or an
+export. The Streamlit app never reads `RAW`, never reads `CURATED` directly, and
+never builds a view name from user input.
+
+| Persona | Identity tier | Semantic view | Withheld from this persona |
+|---------|---------------|---------------|-----------------------------|
+| Clinical Care Coordinator | `IDENTIFIED` | `PATIENT360_SEM_CARE_COORDINATOR` | Claim financials, policy identifiers |
+| Quality & Compliance Analyst | `DEIDENTIFIED` | `PATIENT360_SEM_QUALITY_ANALYST` | Patient name, document body text, `CHIEF_COMPLAINT`, `TREATMENT_PLAN`, dosage detail |
+| Population Health Manager | `COHORT` | `PATIENT360_SEM_POPULATION_HEALTH` | Patient name, exact age (band only), claims, all document evidence, dosage detail |
+| Clinical Pharmacist | `IDENTIFIED` | `PATIENT360_SEM_PHARMACIST` | Diagnostic imaging evidence, claim financials, procedure narrative |
+
+Identity tiers: `IDENTIFIED` may see patient name; `DEIDENTIFIED` gets
+`patient_id` only; `COHORT` gets `patient_id` plus an age band. Age is generalised
+for Population Health because exact age is a re-identification vector in a
+100-patient population.
+
+**Persona resolution.** `PERSONA_ROLE_MAP` maps a Snowflake role to a persona and
+is checked first. When it returns a row the persona is enforced and the selector
+is locked (`ROLE_ENFORCED`); otherwise the sidebar selector drives the persona and
+the mode is recorded as `SELECTOR`. The table is intentionally empty in the
+synthetic phase because this account has one working role (`CARE360_RW_ROLE`).
+Populating it activates role-enforced RBAC with no application change — this is
+the activation point referenced in section 5.5.
+
+**Audit.** Every patient-data read appends one row to `ANALYTICS.APP_ACCESS_AUDIT`
+with timestamp, user, role, persona, resolution mode, action, target view,
+synthetic `patient_id`, row count, and outcome. The application provides `INSERT`
+only; no `UPDATE` or `DELETE` path exists. Log records never carry patient names
+or clinical values.
+
+**Unchanged limitation.** This is still a modelling boundary, not a hard one: a
+role holding `SELECT` on `PATIENT360.RAW` can read excluded columns directly.
+`ROW ACCESS POLICY` remains unsupported on this account edition. What the persona
+layer adds is that the *application* can no longer over-share, and the boundary is
+now asserted by tests (`docs/testing.md`, V1-V9) rather than being convention.
+
+**Deployment.** `PATIENT360.ANALYTICS.CARE360_EVIDENCE_COPILOT`, a Streamlit in
+Snowflake object on `CARE360_WH`, source staged at
+`@PATIENT360.ANALYTICS.APP_STAGE/care360`. The pre-existing shared semantic view
+`PATIENT360_EVIDENCE_SEMANTIC` and the agent `PATIENT360_EVIDENCE_COPILOT` are
+left intact for the administrative and agent paths.
+
 ---
 
 ## 6. MVP Scope (2-Day Hackathon)
