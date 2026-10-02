@@ -1,13 +1,15 @@
 <!--
 Sync Impact Report
-- Version change: 2.1.0 → 2.2.0
+- Version change: 2.2.0 → 2.3.0
 - Modified principles: none renamed
-- Added sections:
-  - Canonical Platform Naming
+- Modified sections:
+  - Target Users & Required Outcomes — replaced four personas (Clinical Care
+    Coordinator, Quality & Compliance Analyst, Population Health Manager,
+    Clinical Pharmacist) with new four (Primary Care Physician, Claims Analyst,
+    Patient, Clinical Pharmacist)
 - Removed sections: none
-- Bump rationale: MINOR — adds a binding governance rule that PATIENT360 is the
-  canonical database name and prohibits future CARE360_DB references without an
-  explicit constitutional amendment
+- Bump rationale: MINOR — changes the constitutional persona set to align with
+  the updated architecture target users
 - Follow-up TODOs: none
 -->
 
@@ -86,10 +88,10 @@ an unrelated workflow, are out of constitution unless explicitly amended here.
 
 | Persona | Role | Primary Use Cases |
 |---------|------|-------------------|
-| Clinical Care Coordinator | Manages care plans across providers | "What medications is this patient on and when were they last adjusted?" / "Summarize this patient's last 3 visits" |
-| Quality & Compliance Analyst | Audits clinical documentation for regulatory adherence | "Show evidence of HbA1c monitoring for diabetic patients" / "Which patients are missing follow-up labs?" |
-| Population Health Manager | Identifies at-risk cohorts and care gaps | "How many diabetic patients have uncontrolled A1c?" / "List patients with >2 ED visits in 90 days" |
-| Clinical Pharmacist | Reviews medication safety and interactions | "What labs were ordered before starting this medication?" / "Show all active prescriptions and their indications" |
+| Primary Care Physician | Reviews patient records, coordinates care, and manages specialist follow-up | "Summarize this patient's recent visits and test results" / "What chronic conditions does this patient have?" |
+| Claims Analyst | Reviews insurance claims and identifies billing, coverage, and documentation issues | "What is the status of recent claims for this patient?" / "Which claims were denied and why?" |
+| Patient | Views their own health information and care history, including alerts and recent visits | "What medications am I currently taking?" / "When is my next appointment?" |
+| Clinical Pharmacist | Reviews medication safety and interactions, including active prescriptions and indications | "What labs were ordered before starting this medication?" / "Show all active prescriptions and their indications" |
 
 Common requirements across all personas are mandatory:
 - Answers MUST cite the source record (table, document, date).
@@ -100,8 +102,8 @@ Common requirements across all personas are mandatory:
   row-level security by care team.
 
 Rationale: Personas anchor the product to real healthcare workflows and ensure
-the system remains useful to care coordination, quality, population health, and
-medication safety review.
+the system remains useful to primary care, claims review, patient self-service,
+and medication safety review.
 
 ## Core Principles
 
@@ -396,4 +398,4 @@ Regulatory compliance (Principles VI-VIII) MUST be re-assessed whenever:
 - A data breach or near-miss incident occurs.
 - Applicable regulations are updated or new regulations take effect.
 
-**Version**: 2.2.0 | **Ratified**: 2026-09-24 | **Last Amended**: 2026-09-27
+**Version**: 2.3.0 | **Ratified**: 2026-09-24 | **Last Amended**: 2026-10-02

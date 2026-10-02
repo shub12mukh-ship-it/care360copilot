@@ -2,10 +2,11 @@
 -- Canonical database target: PATIENT360
 --
 -- Purpose
---   Gives each of the four constitutional personas (see .specify/memory/constitution.md,
---   "Target Users & Required Outcomes") a data surface that contains ONLY the columns
---   that persona is permitted to see, and a persona-scoped semantic view so that
---   Cortex Analyst physically cannot return a restricted field.
+--   Gives each of the four constitutional personas (Primary Care Physician,
+--   Claims Analyst, Patient, Clinical Pharmacist — see constitution.md,
+--   "Target Users & Required Outcomes") a data surface that contains ONLY the
+--   columns that persona is permitted to see, and a persona-scoped semantic view
+--   so that Cortex Analyst physically cannot return a restricted field.
 --
 -- Layer boundary (Principle V)
 --   This file creates objects in ANALYTICS only. Every persona view reads from
@@ -53,30 +54,30 @@ COMMENT = 'Registry of the four constitutional personas. identity_tier values ar
 MERGE INTO PATIENT360.ANALYTICS.PERSONA_REGISTRY AS t
 USING (
     SELECT * FROM VALUES
-        ('CARE_COORDINATOR',
-         'Clinical Care Coordinator',
-         'Manages care plans across providers',
+        ('PCP',
+         'Primary Care Physician',
+         'Reviews patient records, coordinates care, and manages specialist follow-up',
          'IDENTIFIED',
          TRUE,
          'CLINICAL_NOTE,LAB_DOCUMENT,PRESCRIPTION,DIAGNOSTIC_IMAGE',
-         'PATIENT360.ANALYTICS.PATIENT360_SEM_CARE_COORDINATOR',
-         'Treating care team. Needs full identified longitudinal record including clinical narrative to coordinate care across providers.'),
-        ('QUALITY_ANALYST',
-         'Quality & Compliance Analyst',
-         'Audits clinical documentation for regulatory adherence',
+         'PATIENT360.ANALYTICS.PATIENT360_SEM_PCP',
+         'Treating physician. Needs full identified longitudinal record including clinical narrative to coordinate care across providers and manage specialist follow-up.'),
+        ('CLAIMS_ANALYST',
+         'Claims Analyst',
+         'Reviews insurance claims and identifies billing, coverage, and documentation issues',
          'DEIDENTIFIED',
          FALSE,
          'CLINICAL_NOTE,LAB_DOCUMENT,PRESCRIPTION,DIAGNOSTIC_IMAGE',
-         'PATIENT360.ANALYTICS.PATIENT360_SEM_QUALITY_ANALYST',
-         'Audits whether documentation exists and is traceable, not what it says clinically. Receives document metadata and citation pointers but no document body text, no patient name, and no clinical free text.'),
-        ('POPULATION_HEALTH',
-         'Population Health Manager',
-         'Identifies at-risk cohorts and care gaps',
-         'COHORT',
+         'PATIENT360.ANALYTICS.PATIENT360_SEM_CLAIMS_ANALYST',
+         'Reviews claim status, denial reasons, and documentation traceability. Receives document metadata and citation pointers but no document body text, no patient name, and no clinical free text.'),
+        ('PATIENT_SELF',
+         'Patient',
+         'Views their own health information and care history, including alerts and recent visits',
+         'IDENTIFIED',
          FALSE,
-         '',
-         'PATIENT360.ANALYTICS.PATIENT360_SEM_POPULATION_HEALTH',
-         'Works at cohort level. Receives no patient name, no exact age (age band only), no clinical narrative, no claims, and no document evidence. Patient identifier is retained solely so an identified persona can act on a flagged cohort member.'),
+         'LAB_DOCUMENT,PRESCRIPTION',
+         'PATIENT360.ANALYTICS.PATIENT360_SEM_PATIENT',
+         'Patient self-service view. Sees own name, medications, labs, visits, and care alerts. Does not see claims, clinical notes body text, prescriber detail, or document evidence.'),
         ('PHARMACIST',
          'Clinical Pharmacist',
          'Reviews medication safety and interactions',
@@ -152,11 +153,11 @@ COMMENT = 'Append-only audit trail of persona-scoped access to PATIENT360 patien
 -- 4. Persona-scoped secure views
 -- =============================================================================
 -- Naming: PERSONA_<persona abbreviation>_<entity>
---   CC = Clinical Care Coordinator, QA = Quality & Compliance Analyst,
---   PH = Population Health Manager, RX = Clinical Pharmacist
+--   CC = Primary Care Physician, QA = Claims Analyst,
+--   PT = Patient, RX = Clinical Pharmacist
 
 -- -----------------------------------------------------------------------------
--- 4.1 Clinical Care Coordinator (IDENTIFIED, full clinical narrative)
+-- 4.1 Primary Care Physician (IDENTIFIED, full clinical narrative)
 -- -----------------------------------------------------------------------------
 
 CREATE OR REPLACE SECURE VIEW PATIENT360.ANALYTICS.PERSONA_CC_PATIENT
@@ -299,7 +300,7 @@ SELECT
 FROM PATIENT360.CURATED.CURATED_DOCUMENT_EVIDENCE;
 
 -- -----------------------------------------------------------------------------
--- 4.2 Quality & Compliance Analyst (DEIDENTIFIED, metadata only)
+-- 4.2 Claims Analyst (DEIDENTIFIED, claims focus, no clinical text)
 -- -----------------------------------------------------------------------------
 -- Rationale: this persona audits whether documentation exists, is traceable, and
 -- was extracted successfully. That is answerable from metadata. Therefore
@@ -442,92 +443,77 @@ SELECT
 FROM PATIENT360.ANALYTICS.ANALYTICS_INGESTION_QUALITY_SUMMARY;
 
 -- -----------------------------------------------------------------------------
--- 4.3 Population Health Manager (COHORT, age-banded, no documents)
+-- 4.3 Patient (IDENTIFIED, limited self-service, no claims/documents/prescriber)
 -- -----------------------------------------------------------------------------
--- Rationale: this persona sizes and ranks cohorts. Exact age is a re-identification
--- vector in a small population, so only a band is projected. Name, clinical
--- narrative, claims, and document evidence are not projected at all.
--- Age bands follow conventional population-health reporting brackets.
+-- Rationale: a patient viewing their own record sees their name, medications,
+-- labs, visits, and care alerts. They do NOT see claims, clinical notes body
+-- text, prescriber detail, or document evidence. This is a self-service view
+-- designed for patient engagement portals.
 
-CREATE OR REPLACE SECURE VIEW PATIENT360.ANALYTICS.PERSONA_PH_PATIENT_COHORT
-COMMENT = 'Population Health cohort surface. No patient name and no exact age: age is generalised to a band because exact age is a re-identification vector in a small cohort. patient_id is retained only so an identified persona can follow up on a flagged member.'
+CREATE OR REPLACE SECURE VIEW PATIENT360.ANALYTICS.PERSONA_PT_PATIENT
+COMMENT = 'Patient self-service patient surface. Identified: the patient sees their own name and demographics. Utilization counts are included for the patient dashboard.'
 AS
 SELECT
     patient_id,
-    CASE
-        WHEN age IS NULL      THEN 'UNKNOWN'
-        WHEN age < 18         THEN '0-17'
-        WHEN age BETWEEN 18 AND 34 THEN '18-34'
-        WHEN age BETWEEN 35 AND 49 THEN '35-49'
-        WHEN age BETWEEN 50 AND 64 THEN '50-64'
-        WHEN age BETWEEN 65 AND 79 THEN '65-79'
-        ELSE '80+'
-    END AS age_band,
+    first_name,
+    last_name,
+    age,
     gender,
     total_visits,
     total_labs,
     total_prescriptions,
     critical_lab_count,
-    searchable_evidence_assets,
     evidence_readiness_status
 FROM PATIENT360.ANALYTICS.ANALYTICS_PATIENT_EVIDENCE_READINESS;
 
-CREATE OR REPLACE SECURE VIEW PATIENT360.ANALYTICS.PERSONA_PH_ENCOUNTER_COHORT
-COMMENT = 'Population Health encounter surface. Supports utilisation questions such as "patients with more than two ED visits in 90 days". Clinical free text is not projected.'
+CREATE OR REPLACE SECURE VIEW PATIENT360.ANALYTICS.PERSONA_PT_ENCOUNTER
+COMMENT = 'Patient self-service encounter surface. Visit date, type, diagnosis, and follow-up status. Chief complaint and treatment plan are excluded as clinical-detail fields; doctor_id is excluded as prescriber detail.'
 AS
 SELECT
     visit_id,
     patient_id,
     visit_date,
     visit_type,
-    diagnosis_code,
     diagnosis_description,
     follow_up_required,
-    lab_result_count,
-    prescription_count
+    follow_up_date
 FROM PATIENT360.CURATED.CURATED_ENCOUNTER_SUMMARY;
 
-CREATE OR REPLACE SECURE VIEW PATIENT360.ANALYTICS.PERSONA_PH_LAB_COHORT
-COMMENT = 'Population Health lab surface. Test type, date, and critical flag support cohort monitoring. Threshold questions such as "A1c above 9 percent" are NOT answerable here: no numeric result value exists in structured data.'
+CREATE OR REPLACE SECURE VIEW PATIENT360.ANALYTICS.PERSONA_PT_LAB
+COMMENT = 'Patient self-service lab surface. Test type, date, status, and critical flag. Patient can see when tests were done and whether results were flagged critical. Numeric values exist only in document text, which this persona cannot access.'
 AS
 SELECT
     lab_result_id,
     patient_id,
     test_date,
     test_type,
-    test_code,
     status,
-    critical_flag,
-    recency_rank,
-    total_results_for_test_type,
-    latest_test_date_for_type
+    critical_flag
 FROM PATIENT360.CURATED.CURATED_LAB_MONITORING_SUMMARY;
 
-CREATE OR REPLACE SECURE VIEW PATIENT360.ANALYTICS.PERSONA_PH_MEDICATION_COHORT
-COMMENT = 'Population Health medication surface. Drug name and status support therapy-class cohorts. Dosage, frequency, NDC, and prescriber are NOT projected: they are dispensing detail, not cohort attributes.'
+CREATE OR REPLACE SECURE VIEW PATIENT360.ANALYTICS.PERSONA_PT_MEDICATION
+COMMENT = 'Patient self-service medication surface. Drug name, dosage, frequency, duration, and status. Prescriber (doctor_id) and NDC code are excluded. Prior lab and indication detail are not projected.'
 AS
 SELECT
     prescription_id,
     patient_id,
     prescription_date,
     medication_name,
+    dosage,
+    frequency,
+    duration,
+    refills,
     medication_status
 FROM PATIENT360.CURATED.CURATED_MEDICATION_EVIDENCE_SUMMARY;
 
-CREATE OR REPLACE SECURE VIEW PATIENT360.ANALYTICS.PERSONA_PH_CARE_GAP
-COMMENT = 'Population Health care-gap surface. The primary at-risk cohort signal for this persona.'
+CREATE OR REPLACE SECURE VIEW PATIENT360.ANALYTICS.PERSONA_PT_CARE_GAP
+COMMENT = 'Patient self-service care-gap surface. Alerts the patient to care gaps they should discuss with their provider.'
 AS
 SELECT
     patient_id,
     gap_category,
     gap_description,
-    gap_priority,
-    latest_visit_date,
-    latest_lab_date,
-    total_visit_count,
-    total_note_count,
-    evidence_readiness_status,
-    citation_capability
+    gap_priority
 FROM PATIENT360.ANALYTICS.ANALYTICS_CARE_GAP_WITH_EVIDENCE;
 
 -- -----------------------------------------------------------------------------
@@ -652,9 +638,9 @@ FROM PATIENT360.ANALYTICS.ANALYTICS_CARE_GAP_WITH_EVIDENCE;
 -- the existing agent and administrative path.
 
 -- -----------------------------------------------------------------------------
--- 5.1 Clinical Care Coordinator
+-- 5.1 Primary Care Physician
 -- -----------------------------------------------------------------------------
-CREATE OR REPLACE SEMANTIC VIEW PATIENT360.ANALYTICS.PATIENT360_SEM_CARE_COORDINATOR
+CREATE OR REPLACE SEMANTIC VIEW PATIENT360.ANALYTICS.PATIENT360_SEM_PCP
   TABLES (
     patients AS PATIENT360.ANALYTICS.PERSONA_CC_PATIENT
       PRIMARY KEY (patient_id)
@@ -763,12 +749,12 @@ CREATE OR REPLACE SEMANTIC VIEW PATIENT360.ANALYTICS.PATIENT360_SEM_CARE_COORDIN
     care_gaps.gap_total AS COUNT(care_gaps.gap_category) COMMENT = 'Number of care gap signals',
     evidence.document_total AS COUNT(evidence.ingestion_asset_id) COMMENT = 'Number of ingested documents'
   )
-  COMMENT = 'Persona-scoped semantic model for the Clinical Care Coordinator. Identified patient access with full clinical narrative and care-plan context. Claim financial amounts and policy identifiers are excluded. Synthetic data only. Findings for clinician review.';
+  COMMENT = 'Persona-scoped semantic model for the Primary Care Physician. Identified patient access with full clinical narrative and care-plan context. Claim financial amounts and policy identifiers are excluded. Synthetic data only. Findings for clinician review.';
 
 -- -----------------------------------------------------------------------------
--- 5.2 Quality & Compliance Analyst
+-- 5.2 Claims Analyst
 -- -----------------------------------------------------------------------------
-CREATE OR REPLACE SEMANTIC VIEW PATIENT360.ANALYTICS.PATIENT360_SEM_QUALITY_ANALYST
+CREATE OR REPLACE SEMANTIC VIEW PATIENT360.ANALYTICS.PATIENT360_SEM_CLAIMS_ANALYST
   TABLES (
     patients AS PATIENT360.ANALYTICS.PERSONA_QA_PATIENT
       PRIMARY KEY (patient_id)
@@ -878,91 +864,81 @@ CREATE OR REPLACE SEMANTIC VIEW PATIENT360.ANALYTICS.PATIENT360_SEM_QUALITY_ANAL
     evidence.searchable_document_total AS SUM(IFF(evidence.is_searchable_evidence, 1, 0))
       COMMENT = 'Number of searchable documents'
   )
-  COMMENT = 'Persona-scoped semantic model for the Quality & Compliance Analyst. De-identified: no patient name, no clinical free text, and no document body text. Optimised for documentation-adherence and traceability audit. Synthetic data only.';
+  COMMENT = 'Persona-scoped semantic model for the Claims Analyst. De-identified: no patient name, no clinical free text, and no document body text. Optimised for claims review, documentation-adherence, and traceability audit. Synthetic data only.';
 
 -- -----------------------------------------------------------------------------
--- 5.3 Population Health Manager
+-- 5.3 Patient
 -- -----------------------------------------------------------------------------
-CREATE OR REPLACE SEMANTIC VIEW PATIENT360.ANALYTICS.PATIENT360_SEM_POPULATION_HEALTH
+CREATE OR REPLACE SEMANTIC VIEW PATIENT360.ANALYTICS.PATIENT360_SEM_PATIENT
   TABLES (
-    cohort AS PATIENT360.ANALYTICS.PERSONA_PH_PATIENT_COHORT
+    patients AS PATIENT360.ANALYTICS.PERSONA_PT_PATIENT
       PRIMARY KEY (patient_id)
-      WITH SYNONYMS ('patients', 'cohort', 'population', 'members')
-      COMMENT = 'One row per patient with age band and utilisation counts. No patient name and no exact age',
-    encounters AS PATIENT360.ANALYTICS.PERSONA_PH_ENCOUNTER_COHORT
+      WITH SYNONYMS ('patient', 'me', 'my record')
+      COMMENT = 'Patient demographics and utilization summary',
+    encounters AS PATIENT360.ANALYTICS.PERSONA_PT_ENCOUNTER
       PRIMARY KEY (visit_id)
-      WITH SYNONYMS ('visits', 'encounters', 'ed visits', 'utilisation')
-      COMMENT = 'Encounter records for utilisation analysis',
-    labs AS PATIENT360.ANALYTICS.PERSONA_PH_LAB_COHORT
-      PRIMARY KEY (lab_result_id)
-      WITH SYNONYMS ('labs', 'lab tests', 'screening')
-      COMMENT = 'Lab results by test type and critical flag. Numeric values are NOT available, so percentage thresholds cannot be evaluated here',
-    medications AS PATIENT360.ANALYTICS.PERSONA_PH_MEDICATION_COHORT
+      WITH SYNONYMS ('visits', 'appointments', 'encounters')
+      COMMENT = 'Visit date, type, diagnosis, and follow-up. Chief complaint, treatment plan, and prescriber are excluded',
+    medications AS PATIENT360.ANALYTICS.PERSONA_PT_MEDICATION
       PRIMARY KEY (prescription_id)
-      WITH SYNONYMS ('medications', 'therapy', 'drugs')
-      COMMENT = 'Drug name and status only, for therapy-class cohorts',
-    care_gaps AS PATIENT360.ANALYTICS.PERSONA_PH_CARE_GAP
+      WITH SYNONYMS ('medications', 'prescriptions', 'drugs', 'meds')
+      COMMENT = 'Medication name, dosage, frequency, and status. Prescriber and NDC are excluded',
+    labs AS PATIENT360.ANALYTICS.PERSONA_PT_LAB
+      PRIMARY KEY (lab_result_id)
+      WITH SYNONYMS ('labs', 'lab results', 'tests')
+      COMMENT = 'Lab test type, date, status, and critical flag. Numeric values exist only in document text which this persona cannot access',
+    care_gaps AS PATIENT360.ANALYTICS.PERSONA_PT_CARE_GAP
       PRIMARY KEY (patient_id, gap_category)
-      WITH SYNONYMS ('gaps', 'care gaps', 'at risk')
-      COMMENT = 'Care gap signals, the primary at-risk cohort indicator'
+      WITH SYNONYMS ('alerts', 'care gaps', 'reminders')
+      COMMENT = 'Care gap alerts for the patient to discuss with their provider'
   )
   RELATIONSHIPS (
-    encounters_to_cohort AS encounters (patient_id) REFERENCES cohort (patient_id),
-    labs_to_cohort AS labs (patient_id) REFERENCES cohort (patient_id),
-    medications_to_cohort AS medications (patient_id) REFERENCES cohort (patient_id),
-    care_gaps_to_cohort AS care_gaps (patient_id) REFERENCES cohort (patient_id)
+    encounters_to_patients AS encounters (patient_id) REFERENCES patients (patient_id),
+    medications_to_patients AS medications (patient_id) REFERENCES patients (patient_id),
+    labs_to_patients AS labs (patient_id) REFERENCES patients (patient_id),
+    care_gaps_to_patients AS care_gaps (patient_id) REFERENCES patients (patient_id)
   )
   FACTS (
-    cohort.visit_count AS total_visits,
-    cohort.lab_count AS total_labs,
-    cohort.prescription_count AS total_prescriptions,
-    cohort.critical_labs AS critical_lab_count,
-    encounters.lab_results AS lab_result_count,
-    encounters.prescriptions AS prescription_count,
-    labs.recency AS recency_rank,
-    labs.results_for_type AS total_results_for_test_type,
-    care_gaps.visit_total AS total_visit_count
+    patients.visit_count AS total_visits,
+    patients.lab_count AS total_labs,
+    patients.prescription_count AS total_prescriptions,
+    patients.critical_labs AS critical_lab_count,
+    medications.refill_count AS refills
   )
   DIMENSIONS (
-    cohort.patient AS patient_id WITH SYNONYMS ('patient id', 'member id')
-      COMMENT = 'Synthetic patient identifier. Patient name is not exposed to this persona',
-    cohort.age_band AS age_band WITH SYNONYMS ('age group', 'age bracket')
-      COMMENT = 'Generalised age band. Exact age is withheld to limit re-identification risk',
-    cohort.gender AS gender,
-    cohort.readiness AS evidence_readiness_status WITH SYNONYMS ('evidence coverage'),
+    patients.patient AS patient_id WITH SYNONYMS ('patient id', 'my id'),
+    patients.first_name AS first_name,
+    patients.last_name AS last_name,
+    patients.age AS age,
+    patients.gender AS gender,
+    patients.readiness AS evidence_readiness_status,
     encounters.visit AS visit_id,
-    encounters.visit_date AS visit_date,
-    encounters.visit_type AS visit_type WITH SYNONYMS ('encounter type', 'ed', 'emergency'),
-    encounters.diagnosis_code AS diagnosis_code WITH SYNONYMS ('icd10'),
-    encounters.diagnosis AS diagnosis_description WITH SYNONYMS ('condition'),
-    encounters.follow_up_required AS follow_up_required,
-    labs.test AS test_type WITH SYNONYMS ('lab test', 'panel', 'hba1c', 'a1c'),
-    labs.test_code AS test_code,
+    encounters.visit_date AS visit_date WITH SYNONYMS ('appointment date'),
+    encounters.visit_type AS visit_type WITH SYNONYMS ('appointment type'),
+    encounters.diagnosis AS diagnosis_description WITH SYNONYMS ('diagnosis', 'condition'),
+    encounters.follow_up_required AS follow_up_required WITH SYNONYMS ('needs follow up'),
+    encounters.follow_up_date AS follow_up_date WITH SYNONYMS ('next appointment'),
+    medications.medication AS medication_name WITH SYNONYMS ('drug', 'drug name'),
+    medications.dosage AS dosage,
+    medications.frequency AS frequency WITH SYNONYMS ('how often'),
+    medications.duration AS duration WITH SYNONYMS ('how long'),
+    medications.medication_status AS medication_status WITH SYNONYMS ('active medication'),
+    medications.prescribed_on AS prescription_date WITH SYNONYMS ('when prescribed'),
+    labs.test AS test_type WITH SYNONYMS ('lab test'),
     labs.test_date AS test_date,
-    labs.is_critical AS critical_flag WITH SYNONYMS ('critical result', 'abnormal')
-      COMMENT = 'TRUE when flagged critical. This is the only severity signal available without reading the document',
-    labs.latest_for_type AS latest_test_date_for_type,
-    medications.medication AS medication_name WITH SYNONYMS ('drug', 'therapy'),
-    medications.prescribed_on AS prescription_date,
-    medications.medication_status AS medication_status,
-    care_gaps.gap AS gap_category WITH SYNONYMS ('gap type'),
-    care_gaps.gap_priority AS gap_priority WITH SYNONYMS ('risk level'),
-    care_gaps.citation_capability AS citation_capability
+    labs.lab_status AS status,
+    labs.is_critical AS critical_flag WITH SYNONYMS ('critical result'),
+    care_gaps.gap AS gap_category WITH SYNONYMS ('alert type'),
+    care_gaps.gap_priority AS gap_priority WITH SYNONYMS ('urgency')
   )
   METRICS (
-    cohort.patient_total AS COUNT(cohort.patient_id) COMMENT = 'Number of patients in the cohort',
-    cohort.avg_visits AS AVG(cohort.total_visits) COMMENT = 'Average visits per patient',
-    cohort.total_critical_labs AS SUM(cohort.critical_lab_count) COMMENT = 'Total critical lab results',
-    encounters.encounter_total AS COUNT(encounters.visit_id) COMMENT = 'Number of encounters',
+    encounters.encounter_total AS COUNT(encounters.visit_id) COMMENT = 'Number of visits',
+    medications.medication_total AS COUNT(medications.prescription_id) COMMENT = 'Number of prescriptions',
     labs.lab_total AS COUNT(labs.lab_result_id) COMMENT = 'Number of lab results',
     labs.critical_lab_total AS SUM(IFF(labs.critical_flag, 1, 0)) COMMENT = 'Number of critical lab results',
-    labs.tested_patient_total AS COUNT(DISTINCT labs.patient_id) COMMENT = 'Number of patients with at least one lab result',
-    medications.medication_total AS COUNT(medications.prescription_id) COMMENT = 'Number of prescriptions',
-    medications.treated_patient_total AS COUNT(DISTINCT medications.patient_id) COMMENT = 'Number of patients on therapy',
-    care_gaps.gap_total AS COUNT(care_gaps.gap_category) COMMENT = 'Number of care gap signals',
-    care_gaps.at_risk_patient_total AS COUNT(DISTINCT care_gaps.patient_id) COMMENT = 'Number of patients with a care gap signal'
+    care_gaps.gap_total AS COUNT(care_gaps.gap_category) COMMENT = 'Number of care gap alerts'
   )
-  COMMENT = 'Persona-scoped semantic model for the Population Health Manager. Cohort tier: no patient name, age generalised to a band, no clinical narrative, no claims, and no document evidence. Numeric lab values are unavailable, so value-threshold questions cannot be answered here. Synthetic data only.';
+  COMMENT = 'Persona-scoped semantic model for the Patient self-service view. Identified: sees own name, medications, labs, visits, and care alerts. Does not see claims, document evidence, clinical notes body text, or prescriber detail. Synthetic data only.';
 
 -- -----------------------------------------------------------------------------
 -- 5.4 Clinical Pharmacist
@@ -1077,32 +1053,33 @@ CREATE OR REPLACE SEMANTIC VIEW PATIENT360.ANALYTICS.PATIENT360_SEM_PHARMACIST
 -- Full walkthrough is documented in docs/testing.md.
 --
 -- V1. All four personas registered, each pointing at an existing semantic view.
---     Expect 4 rows, and semantic_view_exists = TRUE for every row.
+--     Expect 4 rows: PCP, CLAIMS_ANALYST, PATIENT_SELF, PHARMACIST.
 --   SELECT r.persona_code, r.identity_tier, r.semantic_view_name
 --   FROM PATIENT360.ANALYTICS.PERSONA_REGISTRY r ORDER BY r.persona_code;
 --
--- V2. Name columns are absent from the de-identified and cohort personas.
+-- V2. Name columns are absent from the de-identified persona (Claims Analyst).
 --     Expect 0 rows.
 --   SELECT table_name, column_name
 --   FROM PATIENT360.INFORMATION_SCHEMA.COLUMNS
 --   WHERE table_schema = 'ANALYTICS'
---     AND (table_name LIKE 'PERSONA_QA_%' OR table_name LIKE 'PERSONA_PH_%')
+--     AND table_name LIKE 'PERSONA_QA_%'
 --     AND column_name IN ('FIRST_NAME', 'LAST_NAME');
 --
--- V3. Document body text is absent from every persona that must not read it.
+-- V3. Document body text is absent from every persona that must not read it
+--     (Claims Analyst and Patient).
 --     Expect 0 rows.
 --   SELECT table_name, column_name
 --   FROM PATIENT360.INFORMATION_SCHEMA.COLUMNS
 --   WHERE table_schema = 'ANALYTICS'
---     AND (table_name LIKE 'PERSONA_QA_%' OR table_name LIKE 'PERSONA_PH_%')
+--     AND (table_name LIKE 'PERSONA_QA_%' OR table_name LIKE 'PERSONA_PT_%')
 --     AND column_name = 'EVIDENCE_TEXT';
 --
--- V4. Exact age is absent from the cohort persona; only age_band exists.
---     Expect exactly one row: PERSONA_PH_PATIENT_COHORT / AGE_BAND.
+-- V4. Patient persona does not see claims, prescriber, or clinical notes text.
+--     Expect 0 rows.
 --   SELECT table_name, column_name
 --   FROM PATIENT360.INFORMATION_SCHEMA.COLUMNS
---   WHERE table_schema = 'ANALYTICS' AND table_name LIKE 'PERSONA_PH_%'
---     AND column_name IN ('AGE', 'AGE_BAND');
+--   WHERE table_schema = 'ANALYTICS' AND table_name LIKE 'PERSONA_PT_%'
+--     AND column_name IN ('DOCTOR_ID', 'NDC_CODE', 'CHIEF_COMPLAINT', 'TREATMENT_PLAN');
 --
 -- V5. No claim financial or policy column reaches any persona view.
 --     Expect 0 rows.
@@ -1120,7 +1097,12 @@ CREATE OR REPLACE SEMANTIC VIEW PATIENT360.ANALYTICS.PATIENT360_SEM_PHARMACIST
 --   SELECT table_name FROM PATIENT360.INFORMATION_SCHEMA.VIEWS
 --   WHERE table_schema = 'ANALYTICS' AND table_name LIKE 'PERSONA_%' AND is_secure = 'NO';
 --
--- V8. Age banding partitions the whole population with no loss.
---     Expect band_total to equal the patient count in ANALYTICS_PATIENT_EVIDENCE_READINESS.
---   SELECT SUM(c) AS band_total FROM (
---     SELECT age_band, COUNT(*) c FROM PATIENT360.ANALYTICS.PERSONA_PH_PATIENT_COHORT GROUP BY age_band);
+-- V8. Patient persona has no claim views. Expect 0 rows.
+--   SELECT table_name FROM PATIENT360.INFORMATION_SCHEMA.VIEWS
+--   WHERE table_schema = 'ANALYTICS' AND table_name LIKE 'PERSONA_PT_%'
+--     AND table_name LIKE '%CLAIM%';
+--
+-- V9. Legacy persona codes (CARE_COORDINATOR, QUALITY_ANALYST, POPULATION_HEALTH)
+--     should not exist in the registry. Expect 0 rows.
+--   SELECT persona_code FROM PATIENT360.ANALYTICS.PERSONA_REGISTRY
+--   WHERE persona_code IN ('CARE_COORDINATOR', 'QUALITY_ANALYST', 'POPULATION_HEALTH');

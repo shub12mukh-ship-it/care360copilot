@@ -19,7 +19,7 @@ HISTORY_TURNS = 10
 # Starter questions per persona, scoped to what each persona may see (see PERSONA_REGISTRY).
 # "patient" = a patient is selected; "general" = population-level questions.
 SAMPLE_QUESTIONS = {
-    "CARE_COORDINATOR": {
+    "PCP": {
         "patient": [
             "Summarize this patient's recent visits and open care gaps.",
             "What medications is this patient on, with dosage and when prescribed?",
@@ -47,7 +47,7 @@ SAMPLE_QUESTIONS = {
             "How many prescriptions have limited supply remaining?",
         ],
     },
-    "QUALITY_ANALYST": {
+    "CLAIMS_ANALYST": {
         "patient": [
             "Which claims were denied for this patient, and what was the stated reason?",
             "How long did each of this patient's claim decisions take?",
@@ -71,7 +71,7 @@ SAMPLE_QUESTIONS = {
         "general": [],
     },
 }
-DEFAULT_QUESTIONS = SAMPLE_QUESTIONS["CARE_COORDINATOR"]
+DEFAULT_QUESTIONS = SAMPLE_QUESTIONS["PCP"]
 
 PRIORITY_COLORS = {"HIGH": "red", "MEDIUM": "orange", "LOW": "green"}
 COVERAGE_LABELS = {
@@ -401,7 +401,6 @@ with st.sidebar:
     else:
         persona_label = st.selectbox("Viewing as", persona_labels, key="persona_select")
         persona_resolution = "SELECTOR"
-        st.caption("⚠️ Demo mode: your role isn't mapped to a persona, so you can switch freely.")
 
     persona_row = personas_df[personas_df["DISPLAY_NAME"] == persona_label].iloc[0]
     deidentified = persona_row.IDENTITY_TIER == "DEIDENTIFIED"
