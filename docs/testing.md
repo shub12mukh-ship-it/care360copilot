@@ -71,13 +71,13 @@ GROUP BY patient_id;
 ### 4. Persona-Aligned Curation Validation
 
 ```sql
--- Clinical Care Coordinator: recent visit and medication summary
+-- Primary Care Physician: recent visit and medication summary
 SELECT patient_id, latest_visit_date, total_visits, total_prescriptions
 FROM PATIENT360.CURATED.CURATED_PATIENT_RECORD
 ORDER BY latest_visit_date DESC
 LIMIT 10;
 
--- Quality & Compliance Analyst: evidence of monitoring and care gaps
+-- Claims Analyst: evidence of monitoring and care gaps
 SELECT patient_id, gap_category, gap_description, gap_priority, latest_lab_date
 FROM PATIENT360.CURATED.CURATED_CARE_GAP_SIGNAL
 ORDER BY gap_priority, patient_id;
@@ -87,7 +87,7 @@ SELECT patient_id, medication_name, prescription_date, related_lab_test_type, re
 FROM PATIENT360.CURATED.CURATED_MEDICATION_EVIDENCE_SUMMARY
 LIMIT 20;
 
--- Population Health Manager: utilization and denied claims signals
+-- Patient: utilization and denied claims signals
 SELECT patient_id, total_visits, denied_claim_count, total_claims
 FROM PATIENT360.CURATED.CURATED_PATIENT_RECORD
 ORDER BY total_visits DESC, denied_claim_count DESC
@@ -345,7 +345,7 @@ Each query below backs one persona in architecture section 5.6. All four must
 return rows.
 
 ```sql
--- Clinical Care Coordinator: current medications with dosage
+-- Primary Care Physician: current medications with dosage
 SELECT * FROM SEMANTIC_VIEW(
   PATIENT360.ANALYTICS.PATIENT360_EVIDENCE_SEMANTIC
   DIMENSIONS patients.patient, medications.medication, medications.dosage,
@@ -360,14 +360,14 @@ SELECT * FROM SEMANTIC_VIEW(
 ) WHERE medication = 'Metformin' AND prior_lab_test IS NOT NULL
 ORDER BY prescribed_on DESC LIMIT 10;
 
--- Quality & Compliance Analyst: HbA1c monitoring evidence
+-- Claims Analyst: HbA1c monitoring evidence
 SELECT * FROM SEMANTIC_VIEW(
   PATIENT360.ANALYTICS.PATIENT360_EVIDENCE_SEMANTIC
   DIMENSIONS patients.patient, labs.test
   METRICS labs.lab_total, labs.critical_lab_total
 ) WHERE test = 'Hemoglobin A1C' ORDER BY critical_lab_total DESC, patient;
 
--- Population Health Manager: coverage friction by denial reason
+-- Patient: coverage friction by denial reason
 SELECT * FROM SEMANTIC_VIEW(
   PATIENT360.ANALYTICS.PATIENT360_EVIDENCE_SEMANTIC
   DIMENSIONS patients.patient, claims.claim_date, claims.diagnosis_code,
@@ -512,15 +512,15 @@ Expected: 0. Image interpretation is outside the pharmacy scope of practice.
 ### V6 - each persona semantic view answers its persona's question
 
 ```sql
--- Population Health: cohort sizing by age band (no name, no exact age)
+-- Patient: medication list with dosage (identified, no prescriber)
 SELECT * FROM SEMANTIC_VIEW(
-  PATIENT360.ANALYTICS.PATIENT360_SEM_POPULATION_HEALTH
-  DIMENSIONS cohort.age_band
-  METRICS cohort.patient_total, cohort.total_critical_labs) ORDER BY 1;
+  PATIENT360.ANALYTICS.PATIENT360_SEM_PATIENT
+  DIMENSIONS patients.patient, patients.first_name, medications.medication, medications.dosage
+  METRICS medications.medication_total) WHERE patient = 'P00014' ORDER BY medication;
 
--- Quality Analyst: monitoring evidence by test type (de-identified)
+-- Claims Analyst: monitoring evidence by test type (de-identified)
 SELECT * FROM SEMANTIC_VIEW(
-  PATIENT360.ANALYTICS.PATIENT360_SEM_QUALITY_ANALYST
+  PATIENT360.ANALYTICS.PATIENT360_SEM_CLAIMS_ANALYST
   DIMENSIONS labs.test
   METRICS labs.lab_total, labs.critical_lab_total) ORDER BY lab_total DESC;
 
@@ -530,17 +530,17 @@ SELECT * FROM SEMANTIC_VIEW(
   DIMENSIONS medications.medication, medications.prior_lab_test
   METRICS medications.medication_total) ORDER BY medication_total DESC;
 
--- Care Coordinator: identified patient medication load
+-- Primary Care Physician: identified patient medication load
 SELECT * FROM SEMANTIC_VIEW(
-  PATIENT360.ANALYTICS.PATIENT360_SEM_CARE_COORDINATOR
+  PATIENT360.ANALYTICS.PATIENT360_SEM_PCP
   DIMENSIONS patients.patient, patients.first_name, patients.last_name
   METRICS medications.medication_total, labs.critical_lab_total)
 WHERE medication_total > 0 ORDER BY medication_total DESC;
 ```
 
-Expected: all four return rows. Note the Care Coordinator query returns names and
-the Quality Analyst and Population Health queries cannot, because those semantic
-views have no name dimension to select.
+Expected: all four return rows. Note the PCP query returns names and
+the Claims Analyst query cannot, because that semantic view has no name
+dimension to select.
 
 ### V7 - audit trail is populated and append-only
 
@@ -582,12 +582,12 @@ Expected navigation per persona (anything else is a defect):
 
 | Persona | Sections |
 |---------|----------|
-| Clinical Care Coordinator | Overview, Patient record, Care gaps, Evidence search, Ask the data, Audit trail |
-| Quality & Compliance Analyst | Overview, Documentation audit, Care gaps, Evidence search, Ask the data, Audit trail |
-| Population Health Manager | Overview, Cohort explorer, Care gaps, Ask the data, Audit trail |
+| Primary Care Physician | Overview, Patient record, Care gaps, Evidence search, Ask the data, Audit trail |
+| Claims Analyst | Overview, Documentation audit, Care gaps, Evidence search, Ask the data, Audit trail |
+| Patient | Overview, Patient record, Care gaps, Ask the data, Audit trail |
 | Clinical Pharmacist | Overview, Medication review, Care gaps, Evidence search, Ask the data, Audit trail |
 
-Population Health has no Evidence search section at all: its `doc_categories` is
-empty, so document retrieval is unavailable rather than merely hidden. Quality
-Analyst has Evidence search but passage text is withheld (`doc_text = False`);
-only the citation is shown.
+Patient has no Evidence search section: document text access is disabled, so
+document retrieval is unavailable rather than merely hidden. Claims Analyst has
+Evidence search but passage text is withheld (`doc_text = False`); only the
+citation is shown.

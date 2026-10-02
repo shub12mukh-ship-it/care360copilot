@@ -308,8 +308,8 @@ never builds a view name from user input.
 
 | Persona | Identity tier | Semantic view | Withheld from this persona |
 |---------|---------------|---------------|-----------------------------|
-| Primary Care Physician | `IDENTIFIED` | `PATIENT360_SEM_CARE_COORDINATOR` | Claim financials, policy identifiers |
-| Claims Analyst | `DEIDENTIFIED` | `PATIENT360_SEM_QUALITY_ANALYST` | Patient name, document body text, `CHIEF_COMPLAINT`, `TREATMENT_PLAN`, dosage detail |
+| Primary Care Physician | `IDENTIFIED` | `PATIENT360_SEM_PCP` | Claim financials, policy identifiers |
+| Claims Analyst | `DEIDENTIFIED` | `PATIENT360_SEM_CLAIMS_ANALYST` | Patient name, document body text, `CHIEF_COMPLAINT`, `TREATMENT_PLAN`, dosage detail |
 | Patient | `IDENTIFIED` | `PATIENT360_SEM_PATIENT` | Claims, document evidence, clinical notes body text, prescriber detail |
 | Clinical Pharmacist | `IDENTIFIED` | `PATIENT360_SEM_PHARMACIST` | Diagnostic imaging evidence, claim financials, procedure narrative |
 
