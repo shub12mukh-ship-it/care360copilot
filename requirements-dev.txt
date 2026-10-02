@@ -1,0 +1,10 @@
+# Local development only — synthetic data and PDF generation scripts.
+# NOT installed by the deployed app. Streamlit Community Cloud reads
+# requirements.txt, which is deliberately limited to the app's runtime
+# dependencies so pandas resolution stays compatible with Snowpark.
+#
+# Install with:  pip install -r requirements-dev.txt
+faker>=20.0.0
+pandas>=2.0.0
+reportlab>=4.0.0
+Pillow>=10.0.0

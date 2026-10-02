@@ -2,6 +2,39 @@
 
 High-quality synthetic healthcare data generated for Care360 Copilot testing and development. This dataset includes realistic medical records, diagnostic reports, lab results, prescriptions, and clinical documentation following industry-standard medical coding systems.
 
+## Business Problem Statement
+
+Healthcare organizations struggle with fragmented patient data spread across EHRs, claims systems, lab platforms, and clinical documents. Clinicians, care coordinators, and compliance teams spend significant time manually piecing together patient histories from these disconnected sources.
+
+Core challenges:
+
+- **Data silos**: structured records (labs, medications, claims) live in separate systems from unstructured clinical notes.
+- **Time-to-insight**: clinicians spend 15-30 minutes per patient assembling a longitudinal view before making care decisions.
+- **Evidence gaps**: regulatory and quality teams cannot quickly trace clinical decisions back to supporting documentation.
+- **Safety risk**: incomplete views lead to missed drug interactions, duplicate tests, and gaps in care continuity.
+
+**What this system does**: a Snowflake-native copilot that unifies structured healthcare records with clinical documents, so natural-language questions are answered with cited evidence drawn from the patient record.
+
+**What this system does not do**: it does not diagnose conditions, does not suggest therapy choices, does not forecast patient trajectories, and does not substitute for clinician judgement. It operates on synthetic data only and contains no identifiable patient information. Every answer must cite its source record, and the system refuses questions it cannot support with retrieved evidence.
+
+See `docs/architecture.md` for the full architecture and `.specify/memory/constitution.md` for the governing principles.
+
+## Target Users
+
+| Persona | Role | Primary Use Cases |
+|---------|------|-------------------|
+| Clinical Care Coordinator | Manages care plans across providers | "What medications is this patient on and when were they last adjusted?" / "Summarize this patient's last 3 visits" |
+| Quality & Compliance Analyst | Audits clinical documentation for regulatory adherence | "Show evidence of HbA1c monitoring for diabetic patients" / "Which patients are missing follow-up labs?" |
+| Population Health Manager | Identifies at-risk cohorts and care gaps | "How many diabetic patients have uncontrolled A1c?" / "List patients with >2 ED visits in 90 days" |
+| Clinical Pharmacist | Reviews medication safety and interactions | "What labs were ordered before starting this medication?" / "Show all active prescriptions and their indications" |
+
+Requirements common to all personas:
+
+- Answers must cite the source record (table, document, date).
+- No unsupported medical conclusions may be inferred.
+- Interactive responses should remain under 10 seconds.
+- The architecture must stay compatible with future role-based access and row-level security by care team.
+
 ## 📊 Dataset Overview
 
 ### Generated Datasets (9 CSV files + Supporting Documents)
