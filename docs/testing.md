@@ -428,3 +428,166 @@ Run these as persona-aligned curation checks before semantic-view and Streamlit 
 | 3 | Patient with notes or reports | "What evidence assets are available for this patient?" | Evidence asset view shows notes, reports, lab documents, and linked imaging/report metadata |
 | 4 | Any patient | "What care or evidence gaps are present?" | Care gap signal view shows explainable, traceable gap categories |
 | 5 | Population | "Which patients have the highest utilization or denied claims?" | Curated patient record supports population-level prioritization review |
+
+---
+
+## Persona Access Layer Validation
+
+Objects under test are created by `sql/patient360_personas.sql`:
+`PERSONA_REGISTRY`, `PERSONA_ROLE_MAP`, `APP_ACCESS_AUDIT`, 25 `PERSONA_*` secure
+views, and the four persona-scoped semantic views.
+
+The access guarantee is **column absence**: a column a persona may not see is not
+projected by that persona's view, so it cannot reach a dataframe, a Cortex Analyst
+answer, or an export. These queries assert that property directly.
+
+### V1 - every persona resolves to an existing semantic view
+
+```sql
+WITH sv AS (
+  SELECT catalog || '.' || "SCHEMA" || '.' || name AS fqn
+  FROM PATIENT360.INFORMATION_SCHEMA.SEMANTIC_VIEWS
+)
+SELECT r.persona_code, r.identity_tier, r.document_text_access,
+       r.semantic_view_name, (sv.fqn IS NOT NULL) AS semantic_view_exists
+FROM PATIENT360.ANALYTICS.PERSONA_REGISTRY r
+LEFT JOIN sv ON sv.fqn = r.semantic_view_name
+ORDER BY r.persona_code;
+```
+
+Expected: 4 rows, `SEMANTIC_VIEW_EXISTS = TRUE` on every row.
+
+### V2 - no restricted column reaches any persona view
+
+Single assertion covering patient identity, document body text, claim financials,
+exact age, and clinical free text.
+
+```sql
+SELECT table_name, column_name
+FROM PATIENT360.INFORMATION_SCHEMA.COLUMNS
+WHERE table_schema = 'ANALYTICS'
+  AND table_name LIKE 'PERSONA_%'
+  AND (
+    ((table_name LIKE 'PERSONA_QA_%' OR table_name LIKE 'PERSONA_PH_%')
+      AND column_name IN ('FIRST_NAME','LAST_NAME','EVIDENCE_TEXT'))
+    OR column_name IN ('BILLED_AMOUNT','ALLOWED_AMOUNT','INSURANCE_PAID',
+                       'PATIENT_RESPONSIBILITY','INSURANCE_POLICY_NUMBER','INSURANCE_PROVIDER')
+    OR (table_name LIKE 'PERSONA_PH_%' AND column_name = 'AGE')
+    OR (table_name LIKE 'PERSONA_QA_%' AND column_name IN ('CHIEF_COMPLAINT','TREATMENT_PLAN'))
+  );
+```
+
+Expected: **0 rows.** Any row is a governance violation and must block merge.
+
+### V3 - every persona view is SECURE
+
+```sql
+SELECT table_name FROM PATIENT360.INFORMATION_SCHEMA.VIEWS
+WHERE table_schema = 'ANALYTICS' AND table_name LIKE 'PERSONA_%' AND is_secure = 'NO';
+```
+
+Expected: 0 rows. Verified 25 of 25 secure at deployment.
+
+### V4 - age banding loses no patient
+
+```sql
+SELECT SUM(c) AS band_total FROM (
+  SELECT age_band, COUNT(*) c
+  FROM PATIENT360.ANALYTICS.PERSONA_PH_PATIENT_COHORT GROUP BY age_band);
+```
+
+Expected: equal to `SELECT COUNT(*) FROM PATIENT360.ANALYTICS.ANALYTICS_PATIENT_EVIDENCE_READINESS`
+(100 at time of writing). Observed bands: 0-17=10, 18-34=23, 35-49=12, 50-64=25,
+65-79=19, 80+=11.
+
+### V5 - pharmacist evidence excludes diagnostic imaging
+
+```sql
+SELECT COUNT(*) FROM PATIENT360.ANALYTICS.PERSONA_RX_EVIDENCE
+WHERE document_category = 'DIAGNOSTIC_IMAGE';
+```
+
+Expected: 0. Image interpretation is outside the pharmacy scope of practice.
+
+### V6 - each persona semantic view answers its persona's question
+
+```sql
+-- Population Health: cohort sizing by age band (no name, no exact age)
+SELECT * FROM SEMANTIC_VIEW(
+  PATIENT360.ANALYTICS.PATIENT360_SEM_POPULATION_HEALTH
+  DIMENSIONS cohort.age_band
+  METRICS cohort.patient_total, cohort.total_critical_labs) ORDER BY 1;
+
+-- Quality Analyst: monitoring evidence by test type (de-identified)
+SELECT * FROM SEMANTIC_VIEW(
+  PATIENT360.ANALYTICS.PATIENT360_SEM_QUALITY_ANALYST
+  DIMENSIONS labs.test
+  METRICS labs.lab_total, labs.critical_lab_total) ORDER BY lab_total DESC;
+
+-- Pharmacist: drug with the lab performed before it was written
+SELECT * FROM SEMANTIC_VIEW(
+  PATIENT360.ANALYTICS.PATIENT360_SEM_PHARMACIST
+  DIMENSIONS medications.medication, medications.prior_lab_test
+  METRICS medications.medication_total) ORDER BY medication_total DESC;
+
+-- Care Coordinator: identified patient medication load
+SELECT * FROM SEMANTIC_VIEW(
+  PATIENT360.ANALYTICS.PATIENT360_SEM_CARE_COORDINATOR
+  DIMENSIONS patients.patient, patients.first_name, patients.last_name
+  METRICS medications.medication_total, labs.critical_lab_total)
+WHERE medication_total > 0 ORDER BY medication_total DESC;
+```
+
+Expected: all four return rows. Note the Care Coordinator query returns names and
+the Quality Analyst and Population Health queries cannot, because those semantic
+views have no name dimension to select.
+
+### V7 - audit trail is populated and append-only
+
+```sql
+SELECT persona_code, persona_resolution, action, target_object, row_count, outcome
+FROM PATIENT360.ANALYTICS.APP_ACCESS_AUDIT
+ORDER BY event_at DESC LIMIT 20;
+```
+
+Expected: one row per patient-data read performed by the app, carrying persona,
+resolution mode (`ROLE_ENFORCED` or `SELECTOR`), action, target view, and row
+count. Entries carry the synthetic `patient_id` but never patient names or
+clinical values, per "No PHI in logs".
+
+The application issues `INSERT` only. There is no `UPDATE` or `DELETE` path in
+`app/streamlit_app.py` or in any procedure in `sql/`. Confirm with:
+
+```sql
+SELECT COUNT(*) AS mutation_paths FROM (
+  SELECT 1 FROM PATIENT360.INFORMATION_SCHEMA.PROCEDURES
+  WHERE procedure_definition ILIKE '%APP_ACCESS_AUDIT%'
+    AND (procedure_definition ILIKE '%DELETE FROM%' OR procedure_definition ILIKE '%UPDATE %'));
+```
+
+Expected: 0.
+
+### V8 - refusal guardrail
+
+In the app, open **Ask the data** as any persona and submit:
+
+> "What is the diagnosis for patient P00014 and what treatment do you recommend?"
+
+Expected: the app refuses before any query is issued, and writes an audit row with
+`action = 'ASK_REFUSED'` and `outcome = 'REFUSED'`. No SQL is generated or run.
+
+### V9 - persona page isolation
+
+Expected navigation per persona (anything else is a defect):
+
+| Persona | Sections |
+|---------|----------|
+| Clinical Care Coordinator | Overview, Patient record, Care gaps, Evidence search, Ask the data, Audit trail |
+| Quality & Compliance Analyst | Overview, Documentation audit, Care gaps, Evidence search, Ask the data, Audit trail |
+| Population Health Manager | Overview, Cohort explorer, Care gaps, Ask the data, Audit trail |
+| Clinical Pharmacist | Overview, Medication review, Care gaps, Evidence search, Ask the data, Audit trail |
+
+Population Health has no Evidence search section at all: its `doc_categories` is
+empty, so document retrieval is unavailable rather than merely hidden. Quality
+Analyst has Evidence search but passage text is withheld (`doc_text = False`);
+only the citation is shown.

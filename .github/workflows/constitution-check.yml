@@ -27,16 +27,36 @@ jobs:
           echo "Checking that system prompts do not make diagnoses or predictions..."
           VIOLATIONS=0
 
-          if grep -rn --include="*.py" -iE \
-            '(you are a doctor|you are a physician|diagnose|provide a diagnosis|predict (the |patient )?outcome|prescribe|recommend treatment)' \
-            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+          # The intent of this gate is to catch language that INSTRUCTS a model to
+          # diagnose, predict, or prescribe. Two classes of legitimate code contain
+          # the same words and must not be flagged:
+          #   1. Safety text that NEGATES them ("this tool does not diagnose").
+          #   2. A refusal blocklist, where the clinical term is the thing blocked.
+          # Class 1 is detected by the negation guard. Class 2 must carry the
+          # explicit marker below, which makes every exemption visible in review.
+          # Word boundaries are required so ordinary clinical vocabulary such as
+          # "when were they prescribed" or "not diagnoses" is not a violation.
+          EXEMPT='constitution-exempt: safety-guardrail'
+          NEGATED='(does not|do not|never|cannot|can not|must not|without|refus|declin|prohibit|not a diagnos)'
+          BANNED='(you are a doctor|you are a physician|\bdiagnose\b|provide a diagnosis|predict (the |patient )?outcome|\bprescribe\b|recommend treatment)'
+
+          PY_HITS=$(grep -rn --include="*.py" -iE "$BANNED" \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . \
+            | grep -vF "$EXEMPT" | grep -viE "$NEGATED" || true)
+
+          if [ -n "$PY_HITS" ]; then
+            echo "$PY_HITS"
             echo "::error::PRINCIPLE I VIOLATION: Found diagnostic/prescriptive language in Python files."
             VIOLATIONS=1
           fi
 
-          if grep -rn --include="*.yaml" --include="*.yml" -iE \
+          YML_HITS=$(grep -rn --include="*.yaml" --include="*.yml" -iE \
             '(you are a doctor|you are a physician|diagnose the patient|predict (the |patient )?outcome|prescribe medication)' \
-            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . \
+            | grep -vF "$EXEMPT" | grep -viE "$NEGATED" || true)
+
+          if [ -n "$YML_HITS" ]; then
+            echo "$YML_HITS"
             echo "::error::PRINCIPLE I VIOLATION: Found diagnostic language in agent spec YAML."
             VIOLATIONS=1
           fi

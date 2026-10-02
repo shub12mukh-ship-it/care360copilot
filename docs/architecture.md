@@ -25,10 +25,10 @@ A Snowflake-native copilot that unifies structured healthcare records with clini
 
 | Persona | Role | Primary Use Cases |
 |---------|------|-------------------|
-| **Claims Analyst** | Reviews insurance claims and identifies billing/coverage issues | "What is the status of recent claims for this patient?" / "Which claims were denied and why?" |
-| **Clinical Pharmacist** | Reviews medication safety and interactions | "What labs were ordered before starting this medication?" / "Show all active prescriptions and their indications" |
-| **Patient** | Views their own health information and care history | "What medications am I currently taking?" / "When is my next appointment?" |
-| **Primary Care Physician** | Provides comprehensive patient care and coordinates specialists | "Summarize this patient's recent visits and test results" / "What chronic conditions does this patient have?" |
+| **Primary Care Physician** | Reviews patient records, coordinates care, and manages specialist follow-up | "Summarize this patient's recent visits and test results" / "What chronic conditions does this patient have?" |
+| **Claims Analyst** | Reviews insurance claims and identifies billing, coverage, and documentation issues | "What is the status of recent claims for this patient?" / "Which claims were denied and why?" |
+| **Patient** | Views their own health information and care history, including alerts and recent visits | "What medications am I currently taking?" / "When is my next appointment?" |
+| **Clinical Pharmacist** | Reviews medication safety and interactions, including active prescriptions and indications | "What labs were ordered before starting this medication?" / "Show all active prescriptions and their indications" |
 
 **Common requirements across all personas:**
 - Answers must cite the source record (table, document, date)
@@ -277,10 +277,10 @@ The four target users in section 2 are served by two tools on one agent:
 
 | Persona | Primary path | Status |
 |---------|--------------|--------|
-| Claims Analyst | Analyst: `diagnosis_code`, `procedure_code`, `claim_status`, `denial_reason`, `claim_date` | Structured + documents |
-| Clinical Pharmacist | Analyst: `latest_prior_lab_test_type` / `latest_prior_lab_test_date`, precomputed per prescription | Structured + documents |
-| Patient | Analyst: patient demographics, medications, appointments; Search for clinical summaries | Structured + documents |
 | Primary Care Physician | Analyst: comprehensive patient record view, lab trends, visit history; Search for clinical notes | Structured + documents |
+| Claims Analyst | Analyst: `diagnosis_code`, `procedure_code`, `claim_status`, `denial_reason`, `claim_date` | Structured + documents |
+| Patient | Analyst: patient demographics, medications, appointments; Search for clinical summaries | Structured + documents |
+| Clinical Pharmacist | Analyst: `latest_prior_lab_test_type` / `latest_prior_lab_test_date`, precomputed per prescription | Structured + documents |
 
 **Population Health limitation.** `RAW.LAB_RESULTS` has no result-value column —
 only `TEST_TYPE`, `TEST_CODE`, `STATUS`, and `CRITICAL_FLAG`. Numeric lab values
@@ -291,6 +291,56 @@ quoted from the document. The agent's orchestration instructions encode this rou
 
 Also note only **23 of 100 patients** have any visit or claim history, so
 claims-based and encounter-based demos are limited to that subset.
+
+Also note only **23 of 100 patients** have any visit or claim history, so
+claims-based and encounter-based demos are limited to that subset.
+
+### 5.7 Persona Access Layer
+
+Built by `sql/patient360_personas.sql` and consumed by `app/streamlit_app.py`.
+
+Each persona is bound to its own set of `SECURE` views in `ANALYTICS` and its own
+semantic view. Restriction is achieved by **column absence**, not by hiding fields
+in the UI: a column a persona may not see is not projected by that persona's view,
+so it cannot appear in a Cortex Analyst result, a Streamlit dataframe, or an
+export. The Streamlit app never reads `RAW`, never reads `CURATED` directly, and
+never builds a view name from user input.
+
+| Persona | Identity tier | Semantic view | Withheld from this persona |
+|---------|---------------|---------------|-----------------------------|
+| Primary Care Physician | `IDENTIFIED` | `PATIENT360_SEM_CARE_COORDINATOR` | Claim financials, policy identifiers |
+| Claims Analyst | `DEIDENTIFIED` | `PATIENT360_SEM_QUALITY_ANALYST` | Patient name, document body text, `CHIEF_COMPLAINT`, `TREATMENT_PLAN`, dosage detail |
+| Patient | `IDENTIFIED` | `PATIENT360_SEM_PATIENT` | Claims, document evidence, clinical notes body text, prescriber detail |
+| Clinical Pharmacist | `IDENTIFIED` | `PATIENT360_SEM_PHARMACIST` | Diagnostic imaging evidence, claim financials, procedure narrative |
+
+Identity tiers: `IDENTIFIED` may see patient name; `DEIDENTIFIED` gets
+`patient_id` only.
+
+**Persona resolution.** `PERSONA_ROLE_MAP` maps a Snowflake role to a persona and
+is checked first. When it returns a row the persona is enforced and the selector
+is locked (`ROLE_ENFORCED`); otherwise the sidebar selector drives the persona and
+the mode is recorded as `SELECTOR`. The table is intentionally empty in the
+synthetic phase because this account has one working role (`CARE360_RW_ROLE`).
+Populating it activates role-enforced RBAC with no application change — this is
+the activation point referenced in section 5.5.
+
+**Audit.** Every patient-data read appends one row to `ANALYTICS.APP_ACCESS_AUDIT`
+with timestamp, user, role, persona, resolution mode, action, target view,
+synthetic `patient_id`, row count, and outcome. The application provides `INSERT`
+only; no `UPDATE` or `DELETE` path exists. Log records never carry patient names
+or clinical values.
+
+**Unchanged limitation.** This is still a modelling boundary, not a hard one: a
+role holding `SELECT` on `PATIENT360.RAW` can read excluded columns directly.
+`ROW ACCESS POLICY` remains unsupported on this account edition. What the persona
+layer adds is that the *application* can no longer over-share, and the boundary is
+now asserted by tests (`docs/testing.md`, V1-V9) rather than being convention.
+
+**Deployment.** `PATIENT360.ANALYTICS.CARE360_EVIDENCE_COPILOT`, a Streamlit in
+Snowflake object on `CARE360_WH`, source staged at
+`@PATIENT360.ANALYTICS.APP_STAGE/care360`. The pre-existing shared semantic view
+`PATIENT360_EVIDENCE_SEMANTIC` and the agent `PATIENT360_EVIDENCE_COPILOT` are
+left intact for the administrative and agent paths.
 
 ---
 
