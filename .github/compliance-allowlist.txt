@@ -1,0 +1,35 @@
+# Compliance allowlist — reviewed, intentional disclaimer language.
+#
+# WHY THIS EXISTS
+# The constitution checks in constitution-check.yml are literal regex scans.
+# They cannot tell a prohibition from a promise, so the project's own safety
+# text trips them. For example, under the heading "What this system does NOT
+# do", the bullet "- Replace clinical judgment" matches the scope-drift
+# pattern 'replace clinical judgment' even though it asserts the opposite.
+#
+# Every line below is an exact disclaimer that has been reviewed and is
+# allowed to match. Anything NOT listed here still fails the build, so new
+# genuine violations are caught as before.
+#
+# Lines starting with # and blank lines are stripped before use.
+# Entries are matched as fixed substrings against grep output, so they must
+# be specific enough not to mask a real violation.
+
+# docs/architecture.md — "What this system does NOT do" list
+- Diagnose conditions or recommend treatments
+- Replace clinical judgment
+- Process real PHI (synthetic data only for this MVP)
+
+# docs/architecture.md — section 5.4 Safety & Guardrails
+- **No real PHI**: All data is synthetic; no HIPAA obligations but architecture is PHI-ready
+
+# app/streamlit_app.py — module docstring safety declaration
+Synthetic data only — no real PHI.
+This tool does not diagnose, does not predict outcomes, and does not recommend treatment.
+
+# specs/004-patient360-curation — read model contract
+- The read model does not assume real PHI.
+
+# sql/patient360_personas.sql — audit table COMMENT asserting immutability.
+# Matches 'DELETE.*audit' only because it states that no DELETE path exists.
+Insert-only by design: no UPDATE or DELETE path is provided by the application

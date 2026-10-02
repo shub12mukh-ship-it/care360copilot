@@ -69,12 +69,20 @@ jobs:
           echo "Checking that the codebase stays within the hackathon business problem statement..."
           VIOLATIONS=0
 
+          # Reviewed disclaimer language is allowlisted. See
+          # .github/compliance-allowlist.txt for why this is necessary.
+          grep -vE '^\s*(#|$)' .github/compliance-allowlist.txt > /tmp/allowlist.txt || true
+
           SCOPE_DRIFT_PATTERNS='(treatment recommendation engine|autonomous diagnosis|clinical decision engine|predictive triage|prescribe treatment|replace clinical judgment|real patient deployment|production PHI ingestion|process real PHI)'
-          if grep -rn --include="*.py" --include="*.sql" --include="*.yaml" --include="*.yml" --include="*.md" -iE "$SCOPE_DRIFT_PATTERNS" \
-            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+          MATCHES=$(grep -rn --include="*.py" --include="*.sql" --include="*.yaml" --include="*.yml" --include="*.md" -iE "$SCOPE_DRIFT_PATTERNS" \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . \
+            | { grep -vFf /tmp/allowlist.txt || true; })
+          if [ -n "$MATCHES" ]; then
+            echo "$MATCHES"
             echo ""
             echo "::error::SCOPE VIOLATION: Found language or behavior that drifts beyond the hackathon business problem statement."
             echo "The product MUST remain a Snowflake-native evidence copilot using synthetic data only."
+            echo "If this is intentional disclaimer text, add the exact line to .github/compliance-allowlist.txt."
             VIOLATIONS=1
           fi
 
@@ -129,12 +137,18 @@ jobs:
           echo "Checking that application text does not promise unsupported clinical outcomes..."
           VIOLATIONS=0
 
+          grep -vE '^\s*(#|$)' .github/compliance-allowlist.txt > /tmp/allowlist.txt || true
+
           UNSUPPORTED_PATTERNS='(predict patient outcomes|predict outcomes|recommend treatments|recommend a treatment|replace clinical judgment|clinical diagnosis platform|autonomous clinical recommendation|treatment plan generator)'
-          if grep -rn --include="*.py" --include="*.yaml" --include="*.yml" --include="*.md" -iE "$UNSUPPORTED_PATTERNS" \
-            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+          MATCHES=$(grep -rn --include="*.py" --include="*.yaml" --include="*.yml" --include="*.md" -iE "$UNSUPPORTED_PATTERNS" \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . \
+            | { grep -vFf /tmp/allowlist.txt || true; })
+          if [ -n "$MATCHES" ]; then
+            echo "$MATCHES"
             echo ""
             echo "::error::BUSINESS SCOPE VIOLATION: Found unsupported prediction/treatment or clinician-replacement language."
             echo "The app MUST refuse unsupported predictions and MUST NOT recommend treatment."
+            echo "If this is intentional disclaimer text, add the exact line to .github/compliance-allowlist.txt."
             VIOLATIONS=1
           fi
 
@@ -191,12 +205,18 @@ jobs:
           echo "Checking that the MVP remains synthetic-data only..."
           VIOLATIONS=0
 
+          grep -vE '^\s*(#|$)' .github/compliance-allowlist.txt > /tmp/allowlist.txt || true
+
           REAL_PHI_PATTERNS='(real PHI|production PHI|live patient data|connect to EHR production|customer patient data|actual patient records)'
-          if grep -rn --include="*.py" --include="*.sql" --include="*.yaml" --include="*.yml" --include="*.md" -iE "$REAL_PHI_PATTERNS" \
-            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+          MATCHES=$(grep -rn --include="*.py" --include="*.sql" --include="*.yaml" --include="*.yml" --include="*.md" -iE "$REAL_PHI_PATTERNS" \
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . \
+            | { grep -vFf /tmp/allowlist.txt || true; })
+          if [ -n "$MATCHES" ]; then
+            echo "$MATCHES"
             echo ""
             echo "::error::PRINCIPLE IV VIOLATION: Found language enabling real PHI or live patient data in this MVP."
             echo "This repository is synthetic-data only unless the constitution is amended first."
+            echo "If this is intentional disclaimer text, add the exact line to .github/compliance-allowlist.txt."
             VIOLATIONS=1
           fi
 
@@ -446,13 +466,21 @@ jobs:
             echo "Audit logging infrastructure detected."
           fi
 
-          # Check that no code deletes or modifies audit logs
-          if grep -rn --include="*.py" --include="*.sql" -iE \
+          # Check that no code deletes or modifies audit logs.
+          # Reviewed disclaimer language is allowlisted; see
+          # .github/compliance-allowlist.txt.
+          grep -vE '^\s*(#|$)' .github/compliance-allowlist.txt > /tmp/allowlist.txt || true
+
+          AUDIT_MATCHES=$(grep -rn --include="*.py" --include="*.sql" -iE \
             '(DELETE.*audit|DROP.*audit|TRUNCATE.*audit|UPDATE.*audit.*log|\.delete.*audit)' \
-            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . ; then
+            --exclude-dir=.specify --exclude-dir=.github --exclude-dir=.claude . \
+            | { grep -vFf /tmp/allowlist.txt || true; })
+          if [ -n "$AUDIT_MATCHES" ]; then
+            echo "$AUDIT_MATCHES"
             echo ""
             echo "::error::STRUCTURAL VIOLATION: Code that deletes/modifies audit records detected."
             echo "Audit logs MUST be immutable. No mechanism to alter or delete audit records is permitted."
+            echo "If this is intentional disclaimer text, add the exact line to .github/compliance-allowlist.txt."
             exit 1
           fi
 
