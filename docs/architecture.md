@@ -25,10 +25,10 @@ A Snowflake-native copilot that unifies structured healthcare records with clini
 
 | Persona | Role | Primary Use Cases |
 |---------|------|-------------------|
-| **Clinical Care Coordinator** | Manages care plans across providers | "What medications is this patient on and when were they last adjusted?" / "Summarize this patient's last 3 visits" |
-| **Quality & Compliance Analyst** | Audits clinical documentation for regulatory adherence | "Show evidence of HbA1c monitoring for diabetic patients" / "Which patients are missing follow-up labs?" |
-| **Population Health Manager** | Identifies at-risk cohorts and care gaps | "How many diabetic patients have uncontrolled A1c?" / "List patients with >2 ED visits in 90 days" |
-| **Clinical Pharmacist** | Reviews medication safety and interactions | "What labs were ordered before starting this medication?" / "Show all active prescriptions and their indications" |
+| **Primary Care Physician** | Reviews patient records and coordinates care | "What medications is this patient on?" / "Show me the recent visit history" |
+| **Claims Analyst** | Reviews claims status and documentation adherence | "How many claims were denied and why?" / "Which patients are missing follow-up labs?" |
+| **Patient** | Views own health records and care alerts | "What medications am I taking?" / "When was my last visit?" |
+| **Clinical Pharmacist** | Reviews medication safety and interactions | "What labs were ordered before starting this medication?" / "Show all active prescriptions" |
 
 **Common requirements across all personas:**
 - Answers must cite the source record (table, document, date)
@@ -277,17 +277,10 @@ The four target users in section 2 are served by two tools on one agent:
 
 | Persona | Primary path | Status |
 |---------|--------------|--------|
-| Clinical Care Coordinator | Analyst: `medication_name`, `dosage`, `frequency`, `medication_status`, `prescription_date` | Structured + documents |
-| Quality & Compliance Analyst | Analyst: `test_type`, `critical_flag`, monitoring recency; then Search to cite the report | Structured + documents |
-| Population Health Manager | Analyst: `test_type` + `critical_flag` cohorts, care gap counts | **Partial** — see limitation below |
-| Clinical Pharmacist | Analyst: `latest_prior_lab_test_type` / `latest_prior_lab_test_date`, precomputed per prescription | Structured + documents |
-
-**Population Health limitation.** `RAW.LAB_RESULTS` has no result-value column —
-only `TEST_TYPE`, `TEST_CODE`, `STATUS`, and `CRITICAL_FLAG`. Numeric lab values
-exist **only inside the parsed lab PDF text**. So "patients with a critical A1C
-result" is answerable from structured data, but threshold questions such as
-"uncontrolled A1c above 9%" are not; they must go through `EvidenceSearch` and be
-quoted from the document. The agent's orchestration instructions encode this route.
+| Primary Care Physician | Full patient record, medications, labs, claims, documents | Structured + documents |
+| Claims Analyst | Claims status, denial reasons, documentation audit, lab monitoring | Structured (metadata only) |
+| Patient | Own demographics, visits, medications, labs, care gaps | Structured only |
+| Clinical Pharmacist | Medication detail with prior labs, drug safety review | Structured + documents |
 
 Also note only **23 of 100 patients** have any visit or claim history, so
 claims-based and encounter-based demos are limited to that subset.
@@ -305,15 +298,13 @@ never builds a view name from user input.
 
 | Persona | Identity tier | Semantic view | Withheld from this persona |
 |---------|---------------|---------------|-----------------------------|
-| Clinical Care Coordinator | `IDENTIFIED` | `PATIENT360_SEM_CARE_COORDINATOR` | Claim financials, policy identifiers |
-| Quality & Compliance Analyst | `DEIDENTIFIED` | `PATIENT360_SEM_QUALITY_ANALYST` | Patient name, document body text, `CHIEF_COMPLAINT`, `TREATMENT_PLAN`, dosage detail |
-| Population Health Manager | `COHORT` | `PATIENT360_SEM_POPULATION_HEALTH` | Patient name, exact age (band only), claims, all document evidence, dosage detail |
+| Primary Care Physician | `IDENTIFIED` | `PATIENT360_SEM_CARE_COORDINATOR` | Claim financials, policy identifiers |
+| Claims Analyst | `DEIDENTIFIED` | `PATIENT360_SEM_QUALITY_ANALYST` | Patient name, document body text, `CHIEF_COMPLAINT`, `TREATMENT_PLAN`, dosage detail |
+| Patient | `IDENTIFIED` | `PATIENT360_SEM_PATIENT` | Claims, document evidence, clinical notes body text, prescriber detail |
 | Clinical Pharmacist | `IDENTIFIED` | `PATIENT360_SEM_PHARMACIST` | Diagnostic imaging evidence, claim financials, procedure narrative |
 
 Identity tiers: `IDENTIFIED` may see patient name; `DEIDENTIFIED` gets
-`patient_id` only; `COHORT` gets `patient_id` plus an age band. Age is generalised
-for Population Health because exact age is a re-identification vector in a
-100-patient population.
+`patient_id` only.
 
 **Persona resolution.** `PERSONA_ROLE_MAP` maps a Snowflake role to a persona and
 is checked first. When it returns a row the persona is enforced and the selector
