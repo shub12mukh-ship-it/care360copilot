@@ -143,7 +143,34 @@ def get_session():
         )
         st.stop()
 
-    cfg = {k: v for k, v in dict(st.secrets["snowflake"]).items() if k != "pat"}
+    raw = dict(st.secrets["snowflake"])
+
+    # Trailing whitespace or a stray newline from a copy-paste is a common and
+    # very confusing cause of "Incorrect username or password".
+    cfg = {}
+    for key, value in raw.items():
+        if isinstance(value, str):
+            value = value.strip()
+        if value != "":
+            cfg[key] = value
+
+    # A programmatic access token is used in place of a password. Accept it from
+    # either field so only one value has to be filled in: `pat` is also needed
+    # on its own for the Cortex Analyst REST call, which cannot use a password.
+    token = cfg.pop("pat", None)
+    if not cfg.get("password") and token:
+        cfg["password"] = token
+
+    missing = [k for k in ("account", "user", "password") if not cfg.get(k)]
+    if missing:
+        st.error(
+            "Incomplete Snowflake credentials in Streamlit secrets. Missing or "
+            f"empty: {', '.join(missing)}. Set `password` to your programmatic "
+            "access token (or your account password). See "
+            ".streamlit/secrets.toml.example."
+        )
+        st.stop()
+
     try:
         return Session.builder.configs(cfg).create()
     except Exception as exc:
@@ -461,7 +488,9 @@ def _analyst_request_rest(payload):
     import requests
 
     cfg = dict(st.secrets.get("snowflake", {}))
-    pat = cfg.get("pat")
+    # Accept the token from either field. `password` is included because a PAT
+    # is normally supplied there, in place of an account password.
+    pat = str(cfg.get("pat") or cfg.get("password") or "").strip()
     if not pat:
         st.info(
             "Natural-language querying needs a programmatic access token. Add "
@@ -488,6 +517,13 @@ def _analyst_request_rest(payload):
         st.error(f"Cortex Analyst request failed: {exc}")
         return None
 
+    if resp.status_code in (401, 403):
+        st.error(
+            "Cortex Analyst rejected the credential. The REST API accepts a "
+            "programmatic access token, key-pair JWT, or OAuth -- an account "
+            "password will not work here. Set `pat` to a valid token."
+        )
+        return None
     if resp.status_code != 200:
         st.error(f"Cortex Analyst error (status {resp.status_code}): {resp.text[:300]}")
         return None
