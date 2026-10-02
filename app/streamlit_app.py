@@ -597,12 +597,15 @@ def render_chat(cfg, persona, pid):
                 docs = search_documents(question, cfg["doc_categories"], pid)
                 if docs:
                     audit(persona, "CHAT_DOC_SEARCH", SEARCH_SERVICE, pid, question, len(docs))
-                    doc_lines = ["Supporting documents found:"]
+                    # Constitution Principle II: every factual claim must cite its
+                    # source record. Each citation names the source document and
+                    # its date so the reader can trace the claim back.
+                    doc_lines = ["**Citations — source documents behind this answer:**"]
                     for i, d in enumerate(docs[:3], 1):
                         fname = d.get("original_file_name", "Unknown")
                         dt = d.get("source_event_date", "")
                         snippet = d.get("chunk_text", "")[:180].replace("\n", " ")
-                        doc_lines.append(f"{i}. {fname} ({dt}) - {snippet}...")
+                        doc_lines.append(f"{i}. Cited source: {fname} ({dt}) — {snippet}...")
                     response_parts.append("\n".join(doc_lines))
 
             if not response_parts:
