@@ -25,10 +25,10 @@ A Snowflake-native copilot that unifies structured healthcare records with clini
 
 | Persona | Role | Primary Use Cases |
 |---------|------|-------------------|
-| **Primary Care Physician** | Reviews patient records and coordinates care | "What medications is this patient on?" / "Show me the recent visit history" |
-| **Claims Analyst** | Reviews claims status and documentation adherence | "How many claims were denied and why?" / "Which patients are missing follow-up labs?" |
-| **Patient** | Views own health records and care alerts | "What medications am I taking?" / "When was my last visit?" |
-| **Clinical Pharmacist** | Reviews medication safety and interactions | "What labs were ordered before starting this medication?" / "Show all active prescriptions" |
+| **Primary Care Physician** | Reviews patient records, coordinates care, and manages specialist follow-up | "Summarize this patient's recent visits and test results" / "What chronic conditions does this patient have?" |
+| **Claims Analyst** | Reviews insurance claims and identifies billing, coverage, and documentation issues | "What is the status of recent claims for this patient?" / "Which claims were denied and why?" |
+| **Patient** | Views their own health information and care history, including alerts and recent visits | "What medications am I currently taking?" / "When is my next appointment?" |
+| **Clinical Pharmacist** | Reviews medication safety and interactions, including active prescriptions and indications | "What labs were ordered before starting this medication?" / "Show all active prescriptions and their indications" |
 
 **Common requirements across all personas:**
 - Answers must cite the source record (table, document, date)
@@ -277,10 +277,20 @@ The four target users in section 2 are served by two tools on one agent:
 
 | Persona | Primary path | Status |
 |---------|--------------|--------|
-| Primary Care Physician | Full patient record, medications, labs, claims, documents | Structured + documents |
-| Claims Analyst | Claims status, denial reasons, documentation audit, lab monitoring | Structured (metadata only) |
-| Patient | Own demographics, visits, medications, labs, care gaps | Structured only |
-| Clinical Pharmacist | Medication detail with prior labs, drug safety review | Structured + documents |
+| Primary Care Physician | Analyst: comprehensive patient record view, lab trends, visit history; Search for clinical notes | Structured + documents |
+| Claims Analyst | Analyst: `diagnosis_code`, `procedure_code`, `claim_status`, `denial_reason`, `claim_date` | Structured + documents |
+| Patient | Analyst: patient demographics, medications, appointments; Search for clinical summaries | Structured + documents |
+| Clinical Pharmacist | Analyst: `latest_prior_lab_test_type` / `latest_prior_lab_test_date`, precomputed per prescription | Structured + documents |
+
+**Population Health limitation.** `RAW.LAB_RESULTS` has no result-value column —
+only `TEST_TYPE`, `TEST_CODE`, `STATUS`, and `CRITICAL_FLAG`. Numeric lab values
+exist **only inside the parsed lab PDF text**. So "patients with a critical A1C
+result" is answerable from structured data, but threshold questions such as
+"uncontrolled A1c above 9%" are not; they must go through `EvidenceSearch` and be
+quoted from the document. The agent's orchestration instructions encode this route.
+
+Also note only **23 of 100 patients** have any visit or claim history, so
+claims-based and encounter-based demos are limited to that subset.
 
 Also note only **23 of 100 patients** have any visit or claim history, so
 claims-based and encounter-based demos are limited to that subset.
