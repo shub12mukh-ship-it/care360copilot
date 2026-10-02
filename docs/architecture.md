@@ -25,10 +25,10 @@ A Snowflake-native copilot that unifies structured healthcare records with clini
 
 | Persona | Role | Primary Use Cases |
 |---------|------|-------------------|
-| **Clinical Care Coordinator** | Manages care plans across providers | "What medications is this patient on and when were they last adjusted?" / "Summarize this patient's last 3 visits" |
-| **Quality & Compliance Analyst** | Audits clinical documentation for regulatory adherence | "Show evidence of HbA1c monitoring for diabetic patients" / "Which patients are missing follow-up labs?" |
-| **Population Health Manager** | Identifies at-risk cohorts and care gaps | "How many diabetic patients have uncontrolled A1c?" / "List patients with >2 ED visits in 90 days" |
+| **Claims Analyst** | Reviews insurance claims and identifies billing/coverage issues | "What is the status of recent claims for this patient?" / "Which claims were denied and why?" |
 | **Clinical Pharmacist** | Reviews medication safety and interactions | "What labs were ordered before starting this medication?" / "Show all active prescriptions and their indications" |
+| **Patient** | Views their own health information and care history | "What medications am I currently taking?" / "When is my next appointment?" |
+| **Primary Care Physician** | Provides comprehensive patient care and coordinates specialists | "Summarize this patient's recent visits and test results" / "What chronic conditions does this patient have?" |
 
 **Common requirements across all personas:**
 - Answers must cite the source record (table, document, date)
@@ -277,10 +277,10 @@ The four target users in section 2 are served by two tools on one agent:
 
 | Persona | Primary path | Status |
 |---------|--------------|--------|
-| Clinical Care Coordinator | Analyst: `medication_name`, `dosage`, `frequency`, `medication_status`, `prescription_date` | Structured + documents |
-| Quality & Compliance Analyst | Analyst: `test_type`, `critical_flag`, monitoring recency; then Search to cite the report | Structured + documents |
-| Population Health Manager | Analyst: `test_type` + `critical_flag` cohorts, care gap counts | **Partial** — see limitation below |
+| Claims Analyst | Analyst: `diagnosis_code`, `procedure_code`, `claim_status`, `denial_reason`, `claim_date` | Structured + documents |
 | Clinical Pharmacist | Analyst: `latest_prior_lab_test_type` / `latest_prior_lab_test_date`, precomputed per prescription | Structured + documents |
+| Patient | Analyst: patient demographics, medications, appointments; Search for clinical summaries | Structured + documents |
+| Primary Care Physician | Analyst: comprehensive patient record view, lab trends, visit history; Search for clinical notes | Structured + documents |
 
 **Population Health limitation.** `RAW.LAB_RESULTS` has no result-value column —
 only `TEST_TYPE`, `TEST_CODE`, `STATUS`, and `CRITICAL_FLAG`. Numeric lab values
