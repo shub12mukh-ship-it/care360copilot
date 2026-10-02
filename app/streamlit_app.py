@@ -1,795 +1,580 @@
-"""
-Care360 Evidence Copilot — Streamlit in Snowflake application.
-
-Canonical database: PATIENT360.
-Synthetic data only — no real PHI.
-This tool does not diagnose, does not predict outcomes, and does not recommend treatment.
-"""
-
+import html
 import json
+import os
+import re
+import uuid
 
+import pandas as pd
 import streamlit as st
-from snowflake.snowpark import Session
-from snowflake.snowpark.context import get_active_session
-from snowflake.snowpark.exceptions import SnowparkSQLException
 
-DB = "PATIENT360"
-ANALYTICS = f"{DB}.ANALYTICS"
-SEARCH_SERVICE = f"{DB}.DOCUMENTS.DOCUMENT_SEARCH_SERVICE"
+st.set_page_config(page_title="Patient360 Evidence Copilot", page_icon="🩺", layout="wide")
 
-PERSONAS = {
+conn = st.connection("snowflake", ttl=os.getenv("SNOWFLAKE_CONNECTION_TTL"))
+session = conn.session()
+
+AGENT_FQN = "PATIENT360.ANALYTICS.PATIENT360_EVIDENCE_COPILOT"
+GENERAL_OPTION = "General / population question"
+HISTORY_TURNS = 10
+
+# Starter questions per persona, scoped to what each persona may see (see PERSONA_REGISTRY).
+# "patient" = a patient is selected; "general" = population-level questions.
+SAMPLE_QUESTIONS = {
     "CARE_COORDINATOR": {
-        "label": "Primary Care Physician",
-        "icon": "🩺",
-        "desc": "Full patient record, encounters, medications, labs, claims, and clinical documents.",
-        "semantic_view": f"{ANALYTICS}.PATIENT360_SEM_CARE_COORDINATOR",
-        "views": {
-            "patient": f"{ANALYTICS}.PERSONA_CC_PATIENT",
-            "encounter": f"{ANALYTICS}.PERSONA_CC_ENCOUNTER",
-            "medication": f"{ANALYTICS}.PERSONA_CC_MEDICATION",
-            "lab": f"{ANALYTICS}.PERSONA_CC_LAB",
-            "claim": f"{ANALYTICS}.PERSONA_CC_CLAIM",
-            "care_gap": f"{ANALYTICS}.PERSONA_CC_CARE_GAP",
-            "evidence": f"{ANALYTICS}.PERSONA_CC_EVIDENCE",
-        },
-        "doc_categories": ("CLINICAL_NOTE", "LAB_DOCUMENT", "PRESCRIPTION", "DIAGNOSTIC_IMAGE"),
-        "doc_text": True,
-    },
-    "QUALITY_ANALYST": {
-        "label": "Claims Analyst",
-        "icon": "📋",
-        "desc": "Claims status, documentation audit, lab monitoring, and care gap tracking.",
-        "semantic_view": f"{ANALYTICS}.PATIENT360_SEM_QUALITY_ANALYST",
-        "views": {
-            "patient": f"{ANALYTICS}.PERSONA_QA_PATIENT",
-            "encounter": f"{ANALYTICS}.PERSONA_QA_ENCOUNTER",
-            "lab": f"{ANALYTICS}.PERSONA_QA_LAB",
-            "claim": f"{ANALYTICS}.PERSONA_QA_CLAIM",
-            "care_gap": f"{ANALYTICS}.PERSONA_QA_CARE_GAP",
-            "evidence": f"{ANALYTICS}.PERSONA_QA_EVIDENCE",
-            "pipeline_quality": f"{ANALYTICS}.PERSONA_QA_INGESTION_QUALITY",
-        },
-        "doc_categories": ("CLINICAL_NOTE", "LAB_DOCUMENT", "PRESCRIPTION", "DIAGNOSTIC_IMAGE"),
-        "doc_text": False,
-    },
-    "PATIENT_SELF": {
-        "label": "Patient",
-        "icon": "👤",
-        "desc": "Your health summary, visit history, medications, labs, and care alerts.",
-        "semantic_view": f"{ANALYTICS}.PATIENT360_SEM_PATIENT",
-        "views": {
-            "patient": f"{ANALYTICS}.PERSONA_PT_PATIENT",
-            "encounter": f"{ANALYTICS}.PERSONA_PT_ENCOUNTER",
-            "medication": f"{ANALYTICS}.PERSONA_PT_MEDICATION",
-            "lab": f"{ANALYTICS}.PERSONA_PT_LAB",
-            "care_gap": f"{ANALYTICS}.PERSONA_PT_CARE_GAP",
-        },
-        "doc_categories": (),
-        "doc_text": False,
+        "patient": [
+            "Summarize this patient's recent visits and open care gaps.",
+            "What medications is this patient on, with dosage and when prescribed?",
+            "Show the lab report for this patient's most recent critical lab result.",
+            "Which of this patient's follow-ups are overdue?",
+        ],
+        "general": [
+            "Which patients have high-priority care gaps?",
+            "How many patients have critical lab results?",
+            "Which patients have overdue follow-up visits?",
+            "Which patients have no searchable evidence documents?",
+        ],
     },
     "PHARMACIST": {
-        "label": "Clinical Pharmacist",
-        "icon": "💊",
-        "desc": "Medication safety review, drug interactions, lab checks, and prescription history.",
-        "semantic_view": f"{ANALYTICS}.PATIENT360_SEM_PHARMACIST",
-        "views": {
-            "patient": f"{ANALYTICS}.PERSONA_RX_PATIENT",
-            "medication": f"{ANALYTICS}.PERSONA_RX_MEDICATION",
-            "lab": f"{ANALYTICS}.PERSONA_RX_LAB",
-            "claim": f"{ANALYTICS}.PERSONA_RX_CLAIM",
-            "care_gap": f"{ANALYTICS}.PERSONA_RX_CARE_GAP",
-            "evidence": f"{ANALYTICS}.PERSONA_RX_EVIDENCE",
-        },
-        "doc_categories": ("PRESCRIPTION", "LAB_DOCUMENT", "CLINICAL_NOTE"),
-        "doc_text": True,
+        "patient": [
+            "List this patient's active medications with dosage, frequency, and refills.",
+            "What lab test was performed before each medication was prescribed, and when?",
+            "Which of this patient's medications have limited supply remaining?",
+            "Do any current medications lack a recent supporting lab result?",
+        ],
+        "general": [
+            "What are the most prescribed medications?",
+            "Which patients on Metformin have no lab test before the prescription?",
+            "Which patients have critical lab results and active prescriptions?",
+            "How many prescriptions have limited supply remaining?",
+        ],
+    },
+    "QUALITY_ANALYST": {
+        "patient": [
+            "Which claims were denied for this patient, and what was the stated reason?",
+            "How long did each of this patient's claim decisions take?",
+            "Do this patient's claims have supporting documentation on file?",
+            "Which of this patient's claims had coverage friction?",
+        ],
+        "general": [
+            "What are the most common claim denial reasons?",
+            "What is the average number of days to a claim decision?",
+            "How many claims were flagged for coverage friction?",
+            "Which document categories have the most ingestion failures?",
+        ],
+    },
+    "PATIENT_SELF": {
+        "patient": [
+            "What medications am I taking, and how often?",
+            "Do any of my visits need a follow-up, and by what date?",
+            "What were my most recent lab results?",
+            "Do I have any care alerts I should know about?",
+        ],
+        "general": [],
     },
 }
+DEFAULT_QUESTIONS = SAMPLE_QUESTIONS["CARE_COORDINATOR"]
 
-SAMPLE_QUESTIONS = {
-    "CARE_COORDINATOR": [
-        "What medications is this patient currently on?",
-        "Show me the recent visit history",
-        "Are there any critical lab results?",
-        "What care gaps exist for this patient?",
-    ],
-    "QUALITY_ANALYST": [
-        "How many claims were denied and why?",
-        "Which patients are missing follow-up labs?",
-        "Show lab monitoring evidence by test type",
-        "What is the overall documentation quality?",
-    ],
-    "PATIENT_SELF": [
-        "What medications am I taking?",
-        "When was my last visit?",
-        "Do I have any upcoming follow-ups?",
-        "What lab tests have been done?",
-    ],
-    "PHARMACIST": [
-        "What are the most prescribed medications?",
-        "Which prescriptions had no prior lab check?",
-        "Show all denied claims with reasons",
-        "What critical lab results exist?",
-    ],
+PRIORITY_COLORS = {"HIGH": "red", "MEDIUM": "orange", "LOW": "green"}
+COVERAGE_LABELS = {
+    "FULL_EVIDENCE_COVERAGE": "Full",
+    "PARTIAL_EVIDENCE_COVERAGE": "Partial",
+    "NO_SEARCHABLE_EVIDENCE": "None",
 }
-
-REFUSAL_TERMS = (  # constitution-exempt: safety-guardrail
-    "diagnose", "diagnosis for", "what condition does", "prognosis", "life expectancy",  # constitution-exempt: safety-guardrail
-    "will the patient", "should i prescribe", "recommend treatment", "what treatment",  # constitution-exempt: safety-guardrail
-    "how long will", "predict",
-)
+CITATION_LABELS = {
+    "CITABLE": "Supported by source documents",
+    "CITABLE_WITH_GAPS": "Some supporting documents missing",
+    "NOT_CITABLE": "No supporting documents to cite",
+}
+CITATION_TOOLTIPS = {
+    "CITABLE": "All source documents behind this flag are searchable, so the copilot can cite them in its answers.",
+    "CITABLE_WITH_GAPS": "Some of this patient's source documents are missing or could not be read. "
+    "Answers may cite only part of the record, so verify against the chart.",
+    "NOT_CITABLE": "No searchable source documents support this flag. The copilot can only use structured "
+    "records and cannot quote any document.",
+}
+SENSITIVE_COLUMN_RE = re.compile(r"(FIRST|LAST|FULL|PATIENT|PROVIDER|DOCTOR)_?NAME|DOB|BIRTH|ADDRESS|PHONE|EMAIL", re.I)
+DOB_RE = re.compile(r"\b(DOB|Date of Birth)\s*[:\-]\s*[0-9]{1,4}[/\-][0-9]{1,2}[/\-][0-9]{1,4}", re.I)
+PROVIDER_RE = re.compile(r"\b(Dr\.|Provider:)\s*[A-Z][a-z]+(\s+[A-Z][a-z]+)?")
 
 
 # ---------------------------------------------------------------------------
-# Session helpers
+# Data loaders
 # ---------------------------------------------------------------------------
-@st.cache_resource
-def get_session():
-    """Return a Snowpark session.
+@st.cache_data(ttl=600, show_spinner=False)
+def load_personas() -> pd.DataFrame:
+    return session.sql(
+        "SELECT PERSONA_CODE, DISPLAY_NAME, ROLE_DESCRIPTION, IDENTITY_TIER, DOCUMENT_TEXT_ACCESS "
+        "FROM PATIENT360.ANALYTICS.PERSONA_REGISTRY ORDER BY DISPLAY_NAME"
+    ).to_pandas()
 
-    Inside Streamlit in Snowflake the session already exists. When the app is
-    hosted outside Snowflake (for example Streamlit Community Cloud) there is
-    no active session, so one is built from st.secrets instead.
-    """
+
+@st.cache_data(ttl=600, show_spinner=False)
+def load_role_persona() -> str | None:
+    """Persona bound to the active Snowflake role (PERSONA_ROLE_MAP), if any."""
+    rows = session.sql(
+        "SELECT PERSONA_CODE FROM PATIENT360.ANALYTICS.PERSONA_ROLE_MAP "
+        "WHERE SNOWFLAKE_ROLE = CURRENT_ROLE() ORDER BY ASSIGNED_ON DESC LIMIT 1"
+    ).collect()
+    return rows[0][0] if rows else None
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def load_patients() -> pd.DataFrame:
+    return session.sql(
+        "SELECT PATIENT_ID, FIRST_NAME, LAST_NAME, AGE, GENDER, TOTAL_VISITS, TOTAL_LABS, "
+        "TOTAL_PRESCRIPTIONS, TOTAL_CLAIMS, CRITICAL_LAB_COUNT, EVIDENCE_READINESS_STATUS "
+        "FROM PATIENT360.ANALYTICS.ANALYTICS_PATIENT_EVIDENCE_READINESS ORDER BY PATIENT_ID"
+    ).to_pandas()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_care_gaps(patient_id: str) -> pd.DataFrame:
+    return session.sql(
+        "SELECT GAP_CATEGORY, GAP_PRIORITY, GAP_DESCRIPTION, CITATION_CAPABILITY "
+        "FROM PATIENT360.ANALYTICS.ANALYTICS_CARE_GAP_WITH_EVIDENCE WHERE PATIENT_ID = ?",
+        params=[patient_id],
+    ).to_pandas()
+
+
+def clear_data_cache():
+    for loader in (load_personas, load_role_persona, load_patients, load_care_gaps):
+        loader.clear()
+
+
+def log_audit(persona_code, resolution, action, patient_id, question, row_count, outcome):
+    """Best-effort audit trail; never blocks the user if the insert fails."""
     try:
-        return get_active_session()
+        session.sql(
+            "INSERT INTO PATIENT360.ANALYTICS.APP_ACCESS_AUDIT "
+            "(SESSION_ID, USER_IDENTITY, ACTIVE_ROLE, PERSONA_CODE, PERSONA_RESOLUTION, ACTION, "
+            "TARGET_OBJECT, PATIENT_ID, QUESTION_TEXT, ROW_COUNT, OUTCOME) "
+            "SELECT ?, COALESCE(CURRENT_USER(), 'unknown'), CURRENT_ROLE(), ?, ?, ?, ?, ?, ?, ?, ?",
+            params=[
+                st.session_state.session_id, persona_code, resolution, action, AGENT_FQN,
+                patient_id, question[:2000], row_count, outcome,
+            ],
+        ).collect()
     except Exception:
         pass
 
-    if "snowflake" not in st.secrets:
-        st.error(
-            "No Snowflake connection available. This app is running outside "
-            "Snowflake, so it needs credentials in Streamlit secrets under a "
-            "[snowflake] section. See .streamlit/secrets.toml.example."
-        )
-        st.stop()
 
-    cfg = {k: v for k, v in dict(st.secrets["snowflake"]).items() if k != "pat"}
-    try:
-        return Session.builder.configs(cfg).create()
-    except Exception as exc:
-        st.error(f"Could not connect to Snowflake: {exc}")
-        st.stop()
-
-
-def _running_in_snowflake():
-    """True when executing inside Streamlit in Snowflake."""
-    try:
-        import _snowflake  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
-
-
-@st.cache_data(ttl=600)
-def session_context():
-    row = get_session().sql(
-        "SELECT CURRENT_USER() AS u, CURRENT_ROLE() AS r, CURRENT_SESSION() AS s"
-    ).collect()[0]
-    return {"user": row["U"], "role": row["R"], "session": str(row["S"])}
-
-
-def run_query(sql, params=None):
-    try:
-        return get_session().sql(sql, params=params or []).to_pandas()
-    except SnowparkSQLException as exc:
-        st.error(f"Query error: {exc.message}")
+# ---------------------------------------------------------------------------
+# De-identification helpers
+# ---------------------------------------------------------------------------
+def _name_pattern(patients: pd.DataFrame):
+    names = {
+        f"{r.FIRST_NAME} {r.LAST_NAME}".strip()
+        for r in patients.itertuples()
+        if r.FIRST_NAME and r.LAST_NAME
+    }
+    if not names:
         return None
+    alternation = "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+    return re.compile(rf"\b({alternation})\b", re.I)
 
 
-def audit(persona, action, target=None, patient_id=None, question=None, row_count=None, outcome="SUCCESS"):
-    ctx = session_context()
-    try:
-        get_session().sql(
-            f"""INSERT INTO {ANALYTICS}.APP_ACCESS_AUDIT
-              (session_id, user_identity, active_role, persona_code, persona_resolution,
-               action, target_object, patient_id, question_text, row_count, outcome)
-            SELECT ?, ?, ?, ?, 'SELECTOR', ?, ?, ?, ?, ?, ?""",
-            params=[ctx["session"], ctx["user"], ctx["role"], persona,
-                    action, target, patient_id, question, row_count, outcome],
-        ).collect()
-    except SnowparkSQLException:
-        pass
+def redact_text(text: str, name_re) -> str:
+    if not text:
+        return text
+    if name_re is not None:
+        text = name_re.sub("[patient]", text)
+    text = DOB_RE.sub(r"\1: [redacted]", text)
+    return PROVIDER_RE.sub(r"\1 [redacted]", text)
 
 
-def safe_df(df):
-    if df is None or df.empty:
-        return False
-    try:
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    except TypeError:
-        st.dataframe(df, use_container_width=True)
-    return True
-
-
-def safe_text(text):
-    if text:
-        st.markdown(text)
-
-
-@st.cache_data(ttl=600)
-def get_patient_list(view):
-    df = get_session().sql(f"SELECT patient_id, first_name, last_name FROM {view} ORDER BY patient_id").to_pandas()
+def redact_table(df: pd.DataFrame, name_re) -> pd.DataFrame:
+    df = df.drop(columns=[c for c in df.columns if SENSITIVE_COLUMN_RE.search(str(c))])
+    for col in df.select_dtypes(include="object").columns:
+        df[col] = df[col].map(lambda v: redact_text(v, name_re) if isinstance(v, str) else v)
     return df
 
 
-# ---------------------------------------------------------------------------
-# Visual dashboard components
-# ---------------------------------------------------------------------------
-def render_patient_summary(cfg, persona, pid):
-    view = cfg["views"].get("patient")
-    if not view or not pid:
-        return
-    df = run_query(f"SELECT * FROM {view} WHERE patient_id = ?", [pid])
-    if df is None or df.empty:
-        st.warning("No patient record found.")
-        return
-    audit(persona, "VIEW_PATIENT", view, pid, row_count=1)
-    row = df.iloc[0]
-    cols = df.columns.tolist()
-
-    name = ""
-    if "FIRST_NAME" in cols and "LAST_NAME" in cols:
-        name = f"{row.get('FIRST_NAME', '')} {row.get('LAST_NAME', '')}"
-    st.subheader(f"Patient {pid}" + (f" — {name}" if name else ""))
-
-    mc = st.columns(4)
-    if "TOTAL_VISITS" in cols:
-        mc[0].metric("Visits", int(row.get("TOTAL_VISITS", 0)))
-    if "TOTAL_PRESCRIPTIONS" in cols:
-        mc[1].metric("Medications", int(row.get("TOTAL_PRESCRIPTIONS", 0)))
-    if "TOTAL_LABS" in cols:
-        mc[2].metric("Lab Results", int(row.get("TOTAL_LABS", 0)))
-    if "CRITICAL_LAB_COUNT" in cols:
-        mc[3].metric("Critical Labs", int(row.get("CRITICAL_LAB_COUNT", 0)))
-    elif "TOTAL_CLAIMS" in cols:
-        mc[3].metric("Claims", int(row.get("TOTAL_CLAIMS", 0)))
-
-    if "AGE" in cols and "GENDER" in cols:
-        st.caption(f"Age: {row.get('AGE', '-')} | Gender: {row.get('GENDER', '-')}")
-
-    insights = []
-    if "TOTAL_VISITS" in cols:
-        visits = int(row.get("TOTAL_VISITS", 0) or 0)
-        if visits == 0:
-            insights.append("No visits are recorded for this patient yet.")
-        elif visits <= 2:
-            insights.append(f"This patient has a relatively small recorded visit history with {visits} visit(s).")
-        else:
-            insights.append(f"This patient has an active care history with {visits} recorded visits.")
-    if "TOTAL_PRESCRIPTIONS" in cols:
-        medications = int(row.get("TOTAL_PRESCRIPTIONS", 0) or 0)
-        insights.append(f"{medications} medication record(s) are available for review.")
-    if "CRITICAL_LAB_COUNT" in cols:
-        critical = int(row.get("CRITICAL_LAB_COUNT", 0) or 0)
-        if critical > 0:
-            insights.append(f"{critical} lab result(s) were flagged critical and should be reviewed carefully.")
-        else:
-            insights.append("No critical lab flags are present in the structured lab record.")
-    if "EVIDENCE_READINESS_STATUS" in cols:
-        readiness = row.get("EVIDENCE_READINESS_STATUS", "")
-        if readiness:
-            insights.append(f"Document evidence readiness is currently **{readiness.replace('_', ' ').title()}**.")
-
-    if insights:
-        st.info(" ".join(insights))
+def deid_age(age) -> str:
+    """Exact age for de-identified views; ages 90+ are aggregated per HIPAA Safe Harbor."""
+    if pd.isna(age):
+        return "age unknown"
+    years = int(age)
+    return "90+ yrs" if years >= 90 else f"{years} yrs"
 
 
-def render_encounters(cfg, persona, pid):
-    view = cfg["views"].get("encounter")
-    if not view:
-        return
-    where = f" WHERE patient_id = ?" if pid else ""
-    params = [pid] if pid else []
-    df = run_query(f"SELECT * FROM {view}{where} ORDER BY visit_date DESC LIMIT 50", params)
-    if df is None or df.empty:
-        st.caption("No visit records found.")
-        return
-    audit(persona, "VIEW_ENCOUNTERS", view, pid, row_count=len(df))
-
-    st.markdown("##### Recent Visits")
-    cols = df.columns.tolist()
-    if "VISIT_DATE" in cols and "VISIT_TYPE" in cols:
-        chart_df = df.groupby("VISIT_TYPE").size().reset_index(name="COUNT")
-        if not chart_df.empty:
-            st.bar_chart(chart_df, x="VISIT_TYPE", y="COUNT")
-            top_visit = chart_df.sort_values("COUNT", ascending=False).iloc[0]
-            st.caption(
-                f"Most recorded visits are **{top_visit['VISIT_TYPE']}** visits ({int(top_visit['COUNT'])} total)."
-            )
-    safe_df(df[["VISIT_DATE", "VISIT_TYPE", "DIAGNOSIS_DESCRIPTION"] +
-               ([c for c in ["FOLLOW_UP_REQUIRED"] if c in cols])
-              ] if "VISIT_DATE" in cols else df)
+def full_age(age) -> str:
+    return "age unknown" if pd.isna(age) else f"{int(age)} yrs"
 
 
-def render_medications(cfg, persona, pid):
-    view = cfg["views"].get("medication")
-    if not view:
-        return
-    where = f" WHERE patient_id = ?" if pid else ""
-    params = [pid] if pid else []
-    df = run_query(f"SELECT * FROM {view}{where} ORDER BY prescription_date DESC LIMIT 50", params)
-    if df is None or df.empty:
-        st.caption("No medication records found.")
-        return
-    audit(persona, "VIEW_MEDICATIONS", view, pid, row_count=len(df))
-
-    st.markdown("##### Medications")
-    cols = df.columns.tolist()
-    display_cols = [c for c in ["MEDICATION_NAME", "DOSAGE", "FREQUENCY", "PRESCRIPTION_DATE", "MEDICATION_STATUS"] if c in cols]
-    if display_cols:
-        safe_df(df[display_cols])
-    else:
-        safe_df(df)
-
-    if "MEDICATION_NAME" in cols:
-        med_counts = df["MEDICATION_NAME"].value_counts().reset_index()
-        med_counts.columns = ["Medication", "Count"]
-        if len(med_counts) > 1:
-            st.bar_chart(med_counts, x="Medication", y="Count")
-        top_med = med_counts.iloc[0]
-        st.caption(
-            f"The most common medication in the current view is **{top_med['Medication']}** with {int(top_med['Count'])} record(s)."
-        )
-
-
-def render_labs(cfg, persona, pid):
-    view = cfg["views"].get("lab")
-    if not view:
-        return
-    where = f" WHERE patient_id = ?" if pid else ""
-    params = [pid] if pid else []
-    df = run_query(f"SELECT * FROM {view}{where} ORDER BY test_date DESC LIMIT 100", params)
-    if df is None or df.empty:
-        st.caption("No lab results found.")
-        return
-    audit(persona, "VIEW_LABS", view, pid, row_count=len(df))
-
-    st.markdown("##### Lab Results")
-    cols = df.columns.tolist()
-    display_cols = [c for c in ["TEST_TYPE", "TEST_DATE", "STATUS", "CRITICAL_FLAG"] if c in cols]
-    if display_cols:
-        safe_df(df[display_cols])
-    else:
-        safe_df(df)
-
-    if "TEST_TYPE" in cols:
-        test_counts = df["TEST_TYPE"].value_counts().reset_index()
-        test_counts.columns = ["Test Type", "Count"]
-        if len(test_counts) > 1:
-            st.bar_chart(test_counts, x="Test Type", y="Count")
-        top_test = test_counts.iloc[0]
-        st.caption(
-            f"The most common lab in this view is **{top_test['Test Type']}** with {int(top_test['Count'])} result(s)."
-        )
-
-    if "CRITICAL_FLAG" in cols:
-        critical = df["CRITICAL_FLAG"].sum() if df["CRITICAL_FLAG"].dtype == bool else 0
-        if critical > 0:
-            st.warning(f"{critical} critical lab result(s) found — review recommended.")
-
-
-def render_claims(cfg, persona, pid):
-    view = cfg["views"].get("claim")
-    if not view:
-        return
-    where = f" WHERE patient_id = ?" if pid else ""
-    params = [pid] if pid else []
-    df = run_query(f"SELECT * FROM {view}{where} ORDER BY claim_date DESC LIMIT 50", params)
-    if df is None or df.empty:
-        st.caption("No claims data found.")
-        return
-    audit(persona, "VIEW_CLAIMS", view, pid, row_count=len(df))
-
-    st.markdown("##### Claims")
-    cols = df.columns.tolist()
-    display_cols = [c for c in ["CLAIM_DATE", "PROCEDURE_DESCRIPTION", "CLAIM_STATUS", "DENIAL_REASON"] if c in cols]
-    if not display_cols:
-        display_cols = [c for c in ["CLAIM_DATE", "PROCEDURE_CODE", "CLAIM_STATUS", "DENIAL_REASON"] if c in cols]
-    if display_cols:
-        safe_df(df[display_cols])
-    else:
-        safe_df(df)
-
-    if "CLAIM_STATUS" in cols:
-        status_counts = df["CLAIM_STATUS"].value_counts().reset_index()
-        status_counts.columns = ["Status", "Count"]
-        st.bar_chart(status_counts, x="Status", y="Count")
-        if not status_counts.empty:
-            top_status = status_counts.iloc[0]
-            st.caption(
-                f"Most claims in this view are currently **{top_status['Status']}** ({int(top_status['Count'])} claim(s))."
-            )
-
-
-def render_care_gaps(cfg, persona, pid):
-    view = cfg["views"].get("care_gap")
-    if not view:
-        return
-    where = f" WHERE patient_id = ?" if pid else ""
-    params = [pid] if pid else []
-    df = run_query(f"SELECT * FROM {view}{where} ORDER BY gap_priority", params)
-    if df is None or df.empty:
-        st.caption("No care gaps identified.")
-        return
-    audit(persona, "VIEW_CARE_GAPS", view, pid, row_count=len(df))
-
-    st.markdown("##### Care Alerts")
-    cols = df.columns.tolist()
-    display_cols = [c for c in ["GAP_CATEGORY", "GAP_DESCRIPTION", "GAP_PRIORITY"] if c in cols]
-    if display_cols:
-        safe_df(df[display_cols])
-
-    if "GAP_PRIORITY" in cols:
-        priority_counts = df["GAP_PRIORITY"].value_counts().reset_index()
-        priority_counts.columns = ["Priority", "Count"]
-        st.bar_chart(priority_counts, x="Priority", y="Count")
-        if not priority_counts.empty:
-            high = priority_counts[priority_counts["Priority"] == "HIGH"]
-            if not high.empty:
-                st.caption(f"There are {int(high.iloc[0]['Count'])} high-priority care alert(s) in the current view.")
+def pretty(code) -> str:
+    return str(code or "").replace("_", " ").strip().capitalize()
 
 
 # ---------------------------------------------------------------------------
-# Chatbot
+# Agent response handling
 # ---------------------------------------------------------------------------
-def _analyst_request_in_snowflake(payload):
-    """Call Cortex Analyst using the in-Snowflake request bridge."""
-    import _snowflake
+def _extract_table(block: dict):
+    """Agent 'table' blocks carry an inline result set -- no extra query needed."""
+    tbl = block.get("table", {}) or {}
+    result_set = tbl.get("result_set", {}) or {}
+    rows = result_set.get("data", []) or []
+    row_type = (result_set.get("resultSetMetaData", {}) or {}).get("rowType", []) or []
+    cols = [c.get("name") for c in row_type]
+    if not rows or not cols:
+        return None
+    df = pd.DataFrame(rows, columns=cols)
+    # Only convert genuinely numeric columns so codes like NDC/ICD keep leading zeros.
+    for meta in row_type:
+        if str(meta.get("type", "")).lower() in ("fixed", "real"):
+            df[meta["name"]] = pd.to_numeric(df[meta["name"]], errors="coerce")
+    return {"title": tbl.get("title") or "", "df": df}
 
-    resp = _snowflake.send_snow_api_request(
-        "POST", "/api/v2/cortex/analyst/message", {}, {},
-        payload, None, 60000,
+
+def _clean_snippet(text: str) -> str:
+    text = re.sub(r"^#+\s*", "", str(text or ""), flags=re.M)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[:300] + ("…" if len(text) > 300 else "")
+
+
+def parse_agent_response(resp: dict):
+    """Return the final answer (no intermediate 'thinking out loud'), tables, citations, suggestions."""
+    blocks = [b for b in (resp.get("content") or []) if isinstance(b, dict)]
+    last_tool_idx = max(
+        (i for i, b in enumerate(blocks) if b.get("type") in ("tool_use", "tool_result")), default=-1
     )
-    if resp.get("status") != 200:
-        st.error(f"Cortex Analyst error (status {resp.get('status')}).")
-        return None
-    try:
-        return json.loads(resp["content"])
-    except (ValueError, KeyError):
-        st.error("Could not parse the Cortex Analyst response.")
-        return None
+    text_idx = [i for i, b in enumerate(blocks) if b.get("type") == "text" and b.get("text")]
+    final_idx = [i for i in text_idx if i > last_tool_idx] or text_idx[-1:]
 
-
-def _analyst_request_rest(payload):
-    """Call Cortex Analyst over REST when hosted outside Snowflake.
-
-    Requires a programmatic access token (PAT) in st.secrets. A password
-    cannot be used here: the Snowflake REST APIs accept PAT, key-pair JWT, or
-    OAuth, but not password authentication.
-    """
-    import requests
-
-    cfg = dict(st.secrets.get("snowflake", {}))
-    pat = cfg.get("pat")
-    if not pat:
-        st.info(
-            "Natural-language querying needs a programmatic access token. Add "
-            "`pat` to the [snowflake] section of Streamlit secrets to enable "
-            "it. Document search below still works without it."
-        )
-        return None
-
-    account = str(cfg.get("account", "")).strip().lower().replace("_", "-")
-    url = f"https://{account}.snowflakecomputing.com/api/v2/cortex/analyst/message"
-    try:
-        resp = requests.post(
-            url,
-            headers={
-                "Authorization": f"Bearer {pat}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "X-Snowflake-Authorization-Token-Type": "PROGRAMMATIC_ACCESS_TOKEN",
-            },
-            json=payload,
-            timeout=60,
-        )
-    except Exception as exc:
-        st.error(f"Cortex Analyst request failed: {exc}")
-        return None
-
-    if resp.status_code != 200:
-        st.error(f"Cortex Analyst error (status {resp.status_code}): {resp.text[:300]}")
-        return None
-    try:
-        return resp.json()
-    except ValueError:
-        st.error("Could not parse the Cortex Analyst response.")
-        return None
-
-
-def call_cortex_analyst(question, semantic_view):
-    payload = {
-        "messages": [{"role": "user", "content": [{"type": "text", "text": question}]}],
-        "semantic_view": semantic_view,
-    }
-
-    if _running_in_snowflake():
-        content = _analyst_request_in_snowflake(payload)
-    else:
-        content = _analyst_request_rest(payload)
-
-    if not content:
-        return None
-
-    sql_text, parts = None, []
-    for item in content.get("message", {}).get("content", []):
-        if item.get("type") == "text":
-            parts.append(item.get("text", ""))
-        elif item.get("type") == "sql":
-            sql_text = item.get("statement")
-    return sql_text, "\n\n".join(p for p in parts if p)
-
-
-def search_documents(question, categories, pid=None):
-    request = {
-        "query": question,
-        "columns": ["chunk_text", "patient_id", "document_category",
-                     "original_file_name", "source_event_date"],
-        "limit": 6,
-    }
-    scope = [{"@eq": {"document_category": c}} for c in categories]
-    cat_filter = scope[0] if len(scope) == 1 else {"@or": scope}
-    if pid:
-        request["filter"] = {"@and": [cat_filter, {"@eq": {"patient_id": pid}}]}
-    else:
-        request["filter"] = cat_filter
-
-    try:
-        raw = get_session().sql(
-            "SELECT SNOWFLAKE.CORTEX.SEARCH_PREVIEW(?, ?) AS r",
-            params=[SEARCH_SERVICE, json.dumps(request)],
-        ).collect()[0]["R"]
-        return json.loads(raw).get("results", [])
-    except SnowparkSQLException:
-        return []
-
-
-def render_chat(cfg, persona, pid):
-    st.markdown("### Ask a Question")
-    st.caption("Ask questions in natural language. Answers stay within the data this role is allowed to view.")
-
-    history_key = f"chat_history_{persona}_{pid or 'all'}"
-    if history_key not in st.session_state:
-        st.session_state[history_key] = []
-
-    suggestions = SAMPLE_QUESTIONS.get(persona, [])
-    if not st.session_state[history_key] and suggestions:
-        st.caption("Suggested questions")
-        for q in suggestions[:4]:
-            st.markdown(f"- {q}")
-
-    with st.form(key=f"chat_form_{persona}_{pid or 'all'}", clear_on_submit=True):
-        question = st.text_area(
-            "Question",
-            height=100,
-            placeholder="Ask about visits, medications, labs, claims, or care alerts...",
-        )
-        submitted = st.form_submit_button("Ask")
-
-    if submitted and question.strip():
-        lowered = question.lower()
-        if any(term in lowered for term in REFUSAL_TERMS):
-            response = (
-                "I can only provide findings from the available health records. "
-                "I cannot make clinical assessments, predictions, or treatment recommendations."
-            )
-            audit(persona, "CHAT_REFUSED", cfg["semantic_view"], pid, question, 0, "REFUSED")
-            st.session_state[history_key].append({"question": question, "answer": response, "rows": None})
-        else:
-            response_parts = []
-            rows = None
-            result = call_cortex_analyst(question, cfg["semantic_view"])
-            if result:
-                sql_text, interpretation = result
-                if interpretation:
-                    response_parts.append(interpretation)
-                if sql_text:
-                    df = run_query(sql_text)
-                    if df is not None and not df.empty:
-                        rows = df
-                        audit(persona, "CHAT_QUERY", cfg["semantic_view"], pid, question, len(df))
-                        response_parts.append(build_result_summary(df, persona, pid))
-                    elif not interpretation:
-                        response_parts.append("I found a query for that question, but it returned no rows.")
-
-            if cfg["doc_categories"] and cfg["doc_text"]:
-                docs = search_documents(question, cfg["doc_categories"], pid)
-                if docs:
-                    audit(persona, "CHAT_DOC_SEARCH", SEARCH_SERVICE, pid, question, len(docs))
-                    # Constitution Principle II: every factual claim must cite its
-                    # source record. Each citation names the source document and
-                    # its date so the reader can trace the claim back.
-                    doc_lines = ["**Citations — source documents behind this answer:**"]
-                    for i, d in enumerate(docs[:3], 1):
-                        fname = d.get("original_file_name", "Unknown")
-                        dt = d.get("source_event_date", "")
-                        snippet = d.get("chunk_text", "")[:180].replace("\n", " ")
-                        doc_lines.append(f"{i}. Cited source: {fname} ({dt}) — {snippet}...")
-                    response_parts.append("\n".join(doc_lines))
-
-            if not response_parts:
-                response_parts.append(
-                    "I couldn't find a strong answer for that question yet. Try naming a specific patient, medication, lab test, visit, claim, or care alert."
+    text_parts, citations, tables, suggestions, seen = [], [], [], [], set()
+    for i, block in enumerate(blocks):
+        btype = block.get("type")
+        if btype == "text":
+            if i in final_idx:
+                text_parts.append(block.get("text", ""))
+            for ann in block.get("annotations", []) or []:
+                if ann.get("type") != "cortex_search_citation":
+                    continue
+                key = ann.get("doc_title") or ann.get("doc_id")
+                if key in seen:
+                    continue
+                seen.add(key)
+                citations.append(
+                    {"file": ann.get("doc_title") or ann.get("doc_id") or "document", "snippet": _clean_snippet(ann.get("text"))}
                 )
-            st.session_state[history_key].append(
-                {"question": question, "answer": "\n\n".join(response_parts), "rows": rows}
-            )
+        elif btype == "table":
+            extracted = _extract_table(block)
+            if extracted is not None:
+                tables.append(extracted)
+        elif btype == "suggested_queries":
+            suggestions = [q.get("query") for q in block.get("suggested_queries", []) or [] if q.get("query")]
 
-    if st.button("Clear chat", key=f"clear_chat_{persona}_{pid or 'all'}"):
-        st.session_state[history_key] = []
-
-    for item in reversed(st.session_state[history_key]):
-        with st.container():
-            st.markdown(f"**You**: {item['question']}")
-            st.markdown(f"**Care360 Copilot**: {item['answer']}")
-            if item["rows"] is not None:
-                safe_df(item["rows"])
-            st.markdown("---")
+    answer = "\n\n".join(t for t in text_parts if t).strip()
+    if not answer:
+        answer = "I couldn't find a clear answer in the available evidence for that question."
+    return answer, tables, citations[:8], suggestions[:3]
 
 
-def build_result_summary(df, persona, pid):
-    row_count = len(df)
-    column_names = list(df.columns)
-    summaries = [f"I found {row_count} matching record(s)."]
-
-    if "PATIENT_ID" in column_names and not pid:
-        unique_patients = df["PATIENT_ID"].nunique()
-        summaries.append(f"The results cover {unique_patients} patient(s).")
-
-    if "CLAIM_STATUS" in column_names:
-        top_status = df["CLAIM_STATUS"].value_counts().idxmax()
-        top_count = int(df["CLAIM_STATUS"].value_counts().max())
-        summaries.append(f"The most common claim status is **{top_status}** with {top_count} record(s).")
-
-    if "MEDICATION_NAME" in column_names:
-        top_med = df["MEDICATION_NAME"].value_counts().idxmax()
-        summaries.append(f"The most frequent medication in the result is **{top_med}**.")
-
-    if "TEST_TYPE" in column_names:
-        top_test = df["TEST_TYPE"].value_counts().idxmax()
-        summaries.append(f"The most common lab test in the result is **{top_test}**.")
-
-    if "GAP_PRIORITY" in column_names:
-        priorities = ", ".join(df["GAP_PRIORITY"].astype(str).unique().tolist())
-        summaries.append(f"The result includes care alert priorities: {priorities}.")
-
-    return " ".join(summaries)
-
-
-# ---------------------------------------------------------------------------
-# Main application
-# ---------------------------------------------------------------------------
-def main():
-    st.set_page_config(page_title="Care360 Copilot", page_icon="🏥", layout="wide")
-
-    st.markdown("""
-    <style>
-    [data-testid="stSidebar"] { min-width: 280px; }
-    .stMetric { background: rgba(255,255,255,0.05); border-radius: 8px; padding: 12px; }
-    </style>
-    """, unsafe_allow_html=True)
-
-    st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Snowflake_Logo.svg/200px-Snowflake_Logo.svg.png", width=120)
-    st.sidebar.title("Care360 Copilot")
-    st.sidebar.caption("Synthetic healthcare data — POC only")
-    st.sidebar.divider()
-
-    st.sidebar.markdown("**Select your role**")
-    persona_codes = list(PERSONAS.keys())
-    persona = st.sidebar.radio(
-        "Role",
-        persona_codes,
-        format_func=lambda c: f"{PERSONAS[c]['icon']} {PERSONAS[c]['label']}",
-        key="persona_select",
-        label_visibility="collapsed",
+def build_context(persona_row, patient_row) -> str:
+    deidentified = persona_row.IDENTITY_TIER == "DEIDENTIFIED"
+    ctx = (
+        f"Session context -- viewing persona: {persona_row.DISPLAY_NAME} "
+        f"({persona_row.PERSONA_CODE}, identity tier {persona_row.IDENTITY_TIER})."
     )
-    cfg = PERSONAS[persona]
-    st.sidebar.caption(cfg["desc"])
-    st.sidebar.divider()
+    if patient_row is not None:
+        if deidentified:
+            ctx += f" Selected patient: {patient_row.PATIENT_ID} (age {deid_age(patient_row.AGE)}, {patient_row.GENDER})."
+        else:
+            ctx += (
+                f" Selected patient: {patient_row.PATIENT_ID} ({patient_row.FIRST_NAME} {patient_row.LAST_NAME}, "
+                f"age {full_age(patient_row.AGE)})."
+            )
+        ctx += " Answer specifically about this patient unless the question is clearly general."
+    else:
+        ctx += " No specific patient is selected -- treat this as a general or population-level question."
+    if deidentified:
+        ctx += (
+            " The viewer is authorized for DE-IDENTIFIED data only: refer to patients by PATIENT_ID only and do not "
+            "include names, dates of birth, addresses, phone numbers, or provider names."
+        )
+    if not bool(persona_row.DOCUMENT_TEXT_ACCESS):
+        ctx += " The viewer may not see clinical document text: summarize findings, do not quote document text."
+    return ctx
 
-    pid = None
-    patient_view = cfg["views"].get("patient")
-    if patient_view:
-        try:
-            patients_df = get_patient_list(patient_view)
-            if patients_df is not None and not patients_df.empty:
-                cols_available = patients_df.columns.tolist()
-                if "FIRST_NAME" in cols_available and "LAST_NAME" in cols_available:
-                    options = ["All patients"] + [
-                        f"{r.PATIENT_ID} — {r.FIRST_NAME} {r.LAST_NAME}" for r in patients_df.itertuples()
-                    ]
+
+def run_agent(question: str, context: str, history: list) -> dict:
+    # Keep only completed user->assistant pairs; failed turns are dropped entirely.
+    pairs = [
+        (u, a)
+        for u, a in zip(history[::2], history[1::2])
+        if u["role"] == "user" and a["role"] == "assistant" and not a.get("error")
+    ]
+    messages = [
+        {"role": m["role"], "content": [{"type": "text", "text": m["content"]}]}
+        for pair in pairs
+        for m in pair
+    ][-HISTORY_TURNS:]
+    # Agent conversations must start with a user turn.
+    while messages and messages[0]["role"] != "user":
+        messages.pop(0)
+    messages.append({"role": "user", "content": [{"type": "text", "text": f"{context}\n\nQuestion: {question}"}]})
+
+    row = session.sql(
+        "SELECT SNOWFLAKE.CORTEX.DATA_AGENT_RUN(?, ?)",
+        params=[AGENT_FQN, json.dumps({"messages": messages, "stream": False})],
+    ).collect()
+    return json.loads(row[0][0])
+
+
+def queue_prompt(q: str):
+    st.session_state.pending_prompt = q
+
+
+def render_assistant_payload(msg: dict, msg_key: str, show_snippets: bool):
+    st.markdown(msg["content"])
+    for t in msg.get("tables") or []:
+        if t["title"]:
+            st.caption(t["title"])
+        st.dataframe(t["df"], width="stretch", hide_index=True)
+    citations = msg.get("citations") or []
+    if citations:
+        with st.expander(f"📄 {len(citations)} source document(s)"):
+            for c in citations:
+                if show_snippets and c["snippet"]:
+                    st.markdown(f"**{c['file']}**")
+                    st.caption(c["snippet"])
                 else:
-                    options = ["All patients"] + list(patients_df["PATIENT_ID"])
-                pick = st.sidebar.selectbox("Select Patient", options, key=f"pt_{persona}")
-                if pick != "All patients":
-                    pid = pick.split(" — ")[0] if " — " in pick else pick
-        except SnowparkSQLException:
-            pass
+                    st.markdown(f"- **{c['file']}**")
+    if msg.get("warnings"):
+        st.caption("⚠️ " + "; ".join(msg["warnings"]))
+    if msg.get("error_detail"):
+        with st.expander("Technical details"):
+            st.code(msg["error_detail"], language=None)
+    suggestions = msg.get("suggestions") or []
+    if suggestions:
+        st.caption("Follow up:")
+        cols = st.columns(len(suggestions))
+        for i, (col, q) in enumerate(zip(cols, suggestions)):
+            col.button(q, width="stretch", key=f"{msg_key}_sugg_{i}", on_click=queue_prompt, args=(q,))
 
-    st.sidebar.divider()
-    ctx = session_context()
-    st.sidebar.caption(f"Logged in as: {ctx['user']}")
 
-    # -- Main content --
-    header_col1, header_col2 = st.columns([3, 1])
-    with header_col1:
-        st.title(f"{cfg['icon']} {cfg['label']} Dashboard")
-    with header_col2:
-        if pid:
-            st.info(f"Patient: **{pid}**")
+def new_conversation():
+    st.session_state.messages = []
+    st.session_state.pop("pending_prompt", None)
 
-    st.caption("Findings for review only. This is synthetic data — not for clinical use.")
 
-    tab_names = ["📊 Overview"]
-    if cfg["views"].get("claim"):
-        tab_names.insert(1, "📋 Claims")
-    if cfg["doc_categories"] and cfg["doc_text"]:
-        tab_names.append("📄 Documents")
+# ---------------------------------------------------------------------------
+# Session state
+# ---------------------------------------------------------------------------
+st.session_state.setdefault("messages", [])
+st.session_state.setdefault("session_id", str(uuid.uuid4()))
 
-    main_col, chat_col = st.columns([2.1, 1], gap="large")
+# ---------------------------------------------------------------------------
+# Load reference data
+# ---------------------------------------------------------------------------
+try:
+    with st.spinner("Loading patient context..."):
+        personas_df = load_personas()
+        patients_df = load_patients()
+        try:
+            role_persona = load_role_persona()
+        except Exception:
+            role_persona = None
+except Exception as exc:
+    st.error("Couldn't load reference data from Snowflake. Check the app's role and warehouse, then retry.")
+    with st.expander("Technical details"):
+        st.code(str(exc), language=None)
+    st.button("Retry", on_click=clear_data_cache)
+    st.stop()
 
-    with main_col:
-        tabs = st.tabs(tab_names)
+if personas_df.empty:
+    st.error("No personas are configured in PATIENT360.ANALYTICS.PERSONA_REGISTRY.")
+    st.stop()
 
-        # -- Overview tab --
-        with tabs[0]:
-            render_patient_summary(cfg, persona, pid)
-            st.divider()
+# ---------------------------------------------------------------------------
+# Sidebar: persona + patient context
+# ---------------------------------------------------------------------------
+with st.sidebar:
+    st.markdown("### 🩺 Patient360 Copilot")
+    st.caption("Evidence-cited answers for clinician review only. Synthetic data.")
 
-            overview_intro = []
-            if pid:
-                overview_intro.append(f"You are currently looking at the record for **{pid}**.")
+    persona_labels = personas_df["DISPLAY_NAME"].tolist()
+    role_locked = role_persona in set(personas_df["PERSONA_CODE"])
+    if role_locked:
+        locked_label = personas_df.loc[personas_df["PERSONA_CODE"] == role_persona, "DISPLAY_NAME"].iloc[0]
+        persona_label = st.selectbox("Viewing as", [locked_label], disabled=True)
+        persona_resolution = "ROLE_MAP"
+        st.caption("🔒 Persona is set by your Snowflake role.")
+    else:
+        persona_label = st.selectbox("Viewing as", persona_labels, key="persona_select")
+        persona_resolution = "SELECTOR"
+        st.caption("⚠️ Demo mode: your role isn't mapped to a persona, so you can switch freely.")
+
+    persona_row = personas_df[personas_df["DISPLAY_NAME"] == persona_label].iloc[0]
+    deidentified = persona_row.IDENTITY_TIER == "DEIDENTIFIED"
+    show_snippets = bool(persona_row.DOCUMENT_TEXT_ACCESS)
+    st.caption(persona_row.ROLE_DESCRIPTION)
+    if deidentified:
+        st.info("De-identified view: names, dates of birth and provider names are hidden.", icon="🛡️")
+
+    def patient_label(r) -> str:
+        if deidentified:
+            return f"{r.PATIENT_ID} · {deid_age(r.AGE)} · {r.GENDER}"
+        return f"{r.PATIENT_ID} — {r.FIRST_NAME} {r.LAST_NAME}"
+
+    labels_by_id = {r.PATIENT_ID: patient_label(r) for r in patients_df.itertuples()}
+    is_patient_self = persona_row.PERSONA_CODE == "PATIENT_SELF"
+    options = list(labels_by_id) if is_patient_self else [GENERAL_OPTION] + list(labels_by_id)
+    # Remember the chosen patient ourselves so it survives persona switches on every Streamlit version
+    # (options/labels change per persona, which makes Streamlit treat this as a new widget).
+    preferred = st.session_state.get("preferred_patient")
+    choice = st.selectbox(
+        "Patient",
+        options,
+        index=options.index(preferred) if preferred in options else 0,
+        format_func=lambda v: labels_by_id.get(v, v),
+        help="Type to search by patient ID.",
+    )
+    if preferred in options or choice != options[0]:  # don't overwrite with an automatic fallback
+        st.session_state.preferred_patient = choice
+    if is_patient_self:
+        st.caption("Patient self-service is limited to a single patient record.")
+    selected_patient_id = None if choice == GENERAL_OPTION else choice
+    patient_row = (
+        patients_df[patients_df["PATIENT_ID"] == selected_patient_id].iloc[0] if selected_patient_id else None
+    )
+
+    st.divider()
+    st.button("🧹 New conversation", width="stretch", on_click=new_conversation)
+    st.button("🔄 Refresh data", width="stretch", on_click=clear_data_cache, help="Reload personas and patients.")
+
+# Start a fresh conversation whenever persona or patient changes, so context never leaks across them.
+current_ctx = (persona_row.PERSONA_CODE, selected_patient_id)
+if st.session_state.get("chat_context") != current_ctx:
+    if st.session_state.get("chat_context") is not None and st.session_state.messages:
+        st.toast("Context changed — started a new conversation.", icon="🔄")
+    new_conversation()
+    st.session_state.chat_context = current_ctx
+
+name_re = _name_pattern(patients_df) if deidentified else None
+
+# ---------------------------------------------------------------------------
+# Main: title + contextual patient snapshot
+# ---------------------------------------------------------------------------
+st.title("Patient360 Evidence Copilot")
+st.caption(f"Viewing as **{persona_row.DISPLAY_NAME}** · Findings for clinician review only.")
+
+if patient_row is not None:
+    with st.container(border=True):
+        # Wider first column so the patient's name never truncates; metrics share the rest.
+        c1, c2, c3, c4, c5, c6 = st.columns([2.6, 1, 1, 1.1, 1.2, 1.4], vertical_alignment="center")
+        with c1:
+            st.caption("Patient")
+            if deidentified:
+                st.markdown(f"#### {patient_row.PATIENT_ID}")
+                st.caption(f"{deid_age(patient_row.AGE)} · {patient_row.GENDER}")
             else:
-                overview_intro.append("You are viewing the broader role-based summary across the currently accessible patients.")
-            overview_intro.append("Use the visuals to spot patterns quickly, and read the captions below each chart for plain-language takeaways.")
-            st.success(" ".join(overview_intro))
+                st.markdown(f"#### {patient_row.FIRST_NAME} {patient_row.LAST_NAME}")
+                st.caption(f"{patient_row.PATIENT_ID} · {full_age(patient_row.AGE)} · {patient_row.GENDER}")
+        c2.metric("Visits", int(patient_row.TOTAL_VISITS or 0))
+        c3.metric("Labs", int(patient_row.TOTAL_LABS or 0))
+        critical = int(patient_row.CRITICAL_LAB_COUNT or 0)
+        c4.metric("Critical labs", f"🔴 {critical}" if critical else "0")
+        c5.metric("Medications", int(patient_row.TOTAL_PRESCRIPTIONS or 0))
+        c6.metric(
+            "Evidence coverage",
+            COVERAGE_LABELS.get(patient_row.EVIDENCE_READINESS_STATUS, pretty(patient_row.EVIDENCE_READINESS_STATUS)),
+            help="How much of this patient's record has searchable source documents the copilot can cite. "
+            "Full = all documents searchable; Partial = some missing or failed; None = nothing to cite.",
+        )
 
-            col1, col2 = st.columns(2)
-            with col1:
-                render_encounters(cfg, persona, pid)
-            with col2:
-                render_medications(cfg, persona, pid)
+        try:
+            gaps_df = load_care_gaps(selected_patient_id)
+        except Exception:
+            gaps_df = pd.DataFrame()
+            st.caption("Care-gap signals are unavailable right now.")
+        if not gaps_df.empty:
+            st.markdown(
+                "**Open care-gap signals**",
+                help="Automated flags for items in this patient's record that may need clinician review. "
+                "The color shows priority; the evidence note shows whether the copilot can back it with documents.",
+            )
+            for g in gaps_df.itertuples():
+                color = PRIORITY_COLORS.get(str(g.GAP_PRIORITY).upper(), "gray")
+                evidence = CITATION_LABELS.get(g.CITATION_CAPABILITY, "")
+                tooltip = CITATION_TOOLTIPS.get(g.CITATION_CAPABILITY, "")
+                evidence_html = (
+                    f' &nbsp;<span title="{html.escape(tooltip, quote=True)}" style="color:gray;font-style:italic;'
+                    f'cursor:help;border-bottom:1px dotted gray">{html.escape(evidence)} ⓘ</span>'
+                    if evidence
+                    else ""
+                )
+                st.markdown(
+                    f":{color}-badge[{pretty(g.GAP_CATEGORY)} · {pretty(g.GAP_PRIORITY)} priority] "
+                    f"{html.escape(str(g.GAP_DESCRIPTION or ''))}{evidence_html}",
+                    unsafe_allow_html=True,
+                )
 
-            st.divider()
-            col3, col4 = st.columns(2)
-            with col3:
-                render_labs(cfg, persona, pid)
-            with col4:
-                render_care_gaps(cfg, persona, pid)
-
-        # -- Claims tab (if available) --
-        tab_idx = 1
-        if cfg["views"].get("claim"):
-            with tabs[tab_idx]:
-                st.info("This view explains claim status, denials, and claim-related friction in plain terms for the selected role.")
-                render_claims(cfg, persona, pid)
-            tab_idx += 1
-
-        # -- Documents tab (if available) --
-        if cfg["doc_categories"] and cfg["doc_text"]:
-            with tabs[tab_idx]:
-                st.markdown("### Document Search")
-                st.caption("Search across clinical notes, lab reports, and prescriptions.")
-                q = st.text_input("Search documents", placeholder="e.g. hemoglobin a1c results", key="doc_search")
-                if q:
-                    docs = search_documents(q, cfg["doc_categories"], pid)
-                    audit(persona, "DOC_SEARCH", SEARCH_SERVICE, pid, q, len(docs))
-                    if docs:
-                        st.success(f"{len(docs)} document(s) found")
-                        st.caption("These documents are the strongest text matches for your search and can provide evidence behind the structured visuals.")
-                        for i, d in enumerate(docs, 1):
-                            with st.expander(f"{d.get('original_file_name', 'Unknown')} — {d.get('source_event_date', '')}"):
-                                st.markdown(f"**Category:** {d.get('document_category', '')}")
-                                st.markdown(f"**Patient:** {d.get('patient_id', '')}")
-                                st.text(d.get("chunk_text", "")[:800])
-                    else:
-                        st.info("No matching documents found. Try different search terms.")
-
-    with chat_col:
-        st.markdown("## Care360 Assistant")
-        st.caption("Ask questions at any time while you review the visuals.")
-        render_chat(cfg, persona, pid)
+# ---------------------------------------------------------------------------
+# Chat
+# ---------------------------------------------------------------------------
+def render_sample_questions(container):
+    persona_questions = SAMPLE_QUESTIONS.get(persona_row.PERSONA_CODE, DEFAULT_QUESTIONS)
+    scope = "patient" if patient_row is not None else "general"
+    samples = persona_questions.get(scope) or DEFAULT_QUESTIONS[scope]
+    container.markdown(
+        f"**Try asking** · _suggested for {persona_row.DISPLAY_NAME}"
+        + (f", about {selected_patient_id}_" if patient_row is not None else ", across all patients_")
+    )
+    cols = container.columns(2)
+    for i, q in enumerate(samples):
+        cols[i % 2].button(
+            q, width="stretch", key=f"sample_{persona_row.PERSONA_CODE}_{scope}_{i}",
+            on_click=queue_prompt, args=(q,), icon="💬",
+        )
 
 
-main()
+if not st.session_state.messages:
+    render_sample_questions(st)
+else:
+    render_sample_questions(st.expander("💡 Suggested questions", expanded=False))
+
+for i, msg in enumerate(st.session_state.messages):
+    with st.chat_message(msg["role"]):
+        if msg["role"] == "user":
+            st.markdown(msg["content"])
+        else:
+            render_assistant_payload(msg, f"m{i}", show_snippets)
+
+prompt = st.chat_input("Ask about a patient, claim, medication, lab, or care gap...")
+prompt = st.session_state.pop("pending_prompt", None) or prompt
+
+if prompt and prompt.strip():
+    prompt = prompt.strip()
+    history = list(st.session_state.messages)
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    assistant_msg = {"role": "assistant"}
+    with st.chat_message("assistant"):
+        with st.spinner("Reviewing records and evidence... this can take up to a minute."):
+            try:
+                resp = run_agent(prompt, build_context(persona_row, patient_row), history)
+                answer, tables, citations, suggestions = parse_agent_response(resp)
+                if deidentified:
+                    answer = redact_text(answer, name_re)
+                    tables = [{"title": redact_text(t["title"], name_re), "df": redact_table(t["df"], name_re)} for t in tables]
+                    citations = [{"file": c["file"], "snippet": redact_text(c["snippet"], name_re)} for c in citations]
+                    suggestions = [redact_text(s, name_re) for s in suggestions]
+                warnings = [w.get("message", "") for w in (resp.get("warnings") or []) if isinstance(w, dict)]
+                assistant_msg.update(
+                    content=answer, tables=tables, citations=citations, suggestions=suggestions,
+                    warnings=[w for w in warnings if w],
+                )
+                outcome, row_count = "SUCCESS", sum(len(t["df"]) for t in tables)
+            except Exception as exc:
+                assistant_msg.update(
+                    content="Sorry — I couldn't get an answer from the copilot just now. Please try again in a moment.",
+                    error=True,
+                    error_detail=str(exc)[:1000],
+                )
+                outcome, row_count = f"ERROR: {type(exc).__name__}", 0
+    log_audit(persona_row.PERSONA_CODE, persona_resolution, "ASK_AGENT", selected_patient_id, prompt, row_count, outcome)
+
+    st.session_state.messages.append(assistant_msg)
+    # Re-render from history so follow-up buttons get stable keys and work on the first click.
+    st.rerun()
