@@ -7,7 +7,7 @@ import uuid
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Patient360 Evidence Copilot", page_icon="🩺", layout="wide")
+st.set_page_config(page_title="PatientCare 360", page_icon="🩺", layout="wide")
 
 conn = st.connection("snowflake", ttl=os.getenv("SNOWFLAKE_CONNECTION_TTL"))
 session = conn.session()
@@ -388,7 +388,7 @@ if personas_df.empty:
 # Sidebar: persona + patient context
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### 🩺 Patient360 Copilot")
+    st.markdown("### 🩺 PatientCare 360")
     st.caption("Evidence-cited answers for clinician review only. Synthetic data.")
 
     persona_labels = personas_df["DISPLAY_NAME"].tolist()
@@ -453,7 +453,7 @@ name_re = _name_pattern(patients_df) if deidentified else None
 # ---------------------------------------------------------------------------
 # Main: title + contextual patient snapshot
 # ---------------------------------------------------------------------------
-st.title("Patient360 Evidence Copilot")
+st.title("PatientCare 360")
 st.caption(f"Viewing as **{persona_row.DISPLAY_NAME}** · Findings for clinician review only.")
 
 if patient_row is not None:
