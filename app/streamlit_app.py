@@ -9,6 +9,7 @@ This tool does not diagnose, does not predict outcomes, and does not recommend t
 import json
 
 import streamlit as st
+from snowflake.snowpark import Session
 from snowflake.snowpark.context import get_active_session
 from snowflake.snowpark.exceptions import SnowparkSQLException
 
@@ -123,7 +124,41 @@ REFUSAL_TERMS = (  # constitution-exempt: safety-guardrail
 # ---------------------------------------------------------------------------
 @st.cache_resource
 def get_session():
-    return get_active_session()
+    """Return a Snowpark session.
+
+    Inside Streamlit in Snowflake the session already exists. When the app is
+    hosted outside Snowflake (for example Streamlit Community Cloud) there is
+    no active session, so one is built from st.secrets instead.
+    """
+    try:
+        return get_active_session()
+    except Exception:
+        pass
+
+    if "snowflake" not in st.secrets:
+        st.error(
+            "No Snowflake connection available. This app is running outside "
+            "Snowflake, so it needs credentials in Streamlit secrets under a "
+            "[snowflake] section. See .streamlit/secrets.toml.example."
+        )
+        st.stop()
+
+    cfg = {k: v for k, v in dict(st.secrets["snowflake"]).items() if k != "pat"}
+    try:
+        return Session.builder.configs(cfg).create()
+    except Exception as exc:
+        st.error(f"Could not connect to Snowflake: {exc}")
+        st.stop()
+
+
+def _running_in_snowflake():
+    """True when executing inside Streamlit in Snowflake."""
+    try:
+        import _snowflake  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
 
 
 @st.cache_data(ttl=600)
@@ -398,34 +433,83 @@ def render_care_gaps(cfg, persona, pid):
 # ---------------------------------------------------------------------------
 # Chatbot
 # ---------------------------------------------------------------------------
-def call_cortex_analyst(question, semantic_view):
+def _analyst_request_in_snowflake(payload):
+    """Call Cortex Analyst using the in-Snowflake request bridge."""
+    import _snowflake
+
+    resp = _snowflake.send_snow_api_request(
+        "POST", "/api/v2/cortex/analyst/message", {}, {},
+        payload, None, 60000,
+    )
+    if resp.get("status") != 200:
+        st.error(f"Cortex Analyst error (status {resp.get('status')}).")
+        return None
     try:
-        import _snowflake  # noqa: F401
-    except ImportError:
-        st.error("This feature is available only when running inside Snowflake.")
+        return json.loads(resp["content"])
+    except (ValueError, KeyError):
+        st.error("Could not parse the Cortex Analyst response.")
         return None
 
+
+def _analyst_request_rest(payload):
+    """Call Cortex Analyst over REST when hosted outside Snowflake.
+
+    Requires a programmatic access token (PAT) in st.secrets. A password
+    cannot be used here: the Snowflake REST APIs accept PAT, key-pair JWT, or
+    OAuth, but not password authentication.
+    """
+    import requests
+
+    cfg = dict(st.secrets.get("snowflake", {}))
+    pat = cfg.get("pat")
+    if not pat:
+        st.info(
+            "Natural-language querying needs a programmatic access token. Add "
+            "`pat` to the [snowflake] section of Streamlit secrets to enable "
+            "it. Document search below still works without it."
+        )
+        return None
+
+    account = str(cfg.get("account", "")).strip().lower().replace("_", "-")
+    url = f"https://{account}.snowflakecomputing.com/api/v2/cortex/analyst/message"
+    try:
+        resp = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {pat}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "X-Snowflake-Authorization-Token-Type": "PROGRAMMATIC_ACCESS_TOKEN",
+            },
+            json=payload,
+            timeout=60,
+        )
+    except Exception as exc:
+        st.error(f"Cortex Analyst request failed: {exc}")
+        return None
+
+    if resp.status_code != 200:
+        st.error(f"Cortex Analyst error (status {resp.status_code}): {resp.text[:300]}")
+        return None
+    try:
+        return resp.json()
+    except ValueError:
+        st.error("Could not parse the Cortex Analyst response.")
+        return None
+
+
+def call_cortex_analyst(question, semantic_view):
     payload = {
         "messages": [{"role": "user", "content": [{"type": "text", "text": question}]}],
         "semantic_view": semantic_view,
     }
-    try:
-        resp = _snowflake.send_snow_api_request(
-            "POST", "/api/v2/cortex/analyst/message", {}, {},
-            payload, None, 60000,
-        )
-    except Exception as exc:
-        st.error(f"Request failed: {exc}")
-        return None
 
-    if resp.get("status") != 200:
-        st.error(f"Error (status {resp.get('status')})")
-        return None
+    if _running_in_snowflake():
+        content = _analyst_request_in_snowflake(payload)
+    else:
+        content = _analyst_request_rest(payload)
 
-    try:
-        content = json.loads(resp["content"])
-    except (ValueError, KeyError):
-        st.error("Could not parse the response.")
+    if not content:
         return None
 
     sql_text, parts = None, []

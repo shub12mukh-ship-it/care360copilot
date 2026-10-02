@@ -1,0 +1,14 @@
+# Secrets — never commit real credentials.
+# The template .streamlit/secrets.toml.example IS tracked; the real file is not.
+.streamlit/secrets.toml
+.env
+*.pem
+*.key
+credentials.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
